@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import html2canvas from "html2canvas";
 
 // ═══════════════════════════════════════════════════
@@ -29,12 +29,12 @@ const TEAMS = [
 ];
 
 const TIER_TIERS = [
-  { id:"scudetto",  label:"SCUDETTO",         color:"#f5c842", desc:"Campione d'Italia" },
-  { id:"champions", label:"CHAMPIONS",        color:"#5ba3f5", desc:"Top 4 UCL" },
-  { id:"europa",    label:"EUROPA",           color:"#3dbb6e", desc:"Europa / Conference" },
-  { id:"meta",      label:"MET\u00c0 CLASS.", color:"#c084fc", desc:"Stagione tranquilla" },
-  { id:"salvezza",  label:"SALVEZZA",         color:"#f0922b", desc:"Zona salvezza" },
-  { id:"retro",     label:"RETROCESSIONE",    color:"#e84040", desc:"Scende in Serie B" },
+  { id:"scudetto",  label:"SCUDETTO",       color:"#f5c842", desc:"Campione d'Italia" },
+  { id:"champions", label:"CHAMPIONS",      color:"#5ba3f5", desc:"Top 4 UCL" },
+  { id:"europa",    label:"EUROPA",         color:"#3dbb6e", desc:"Europa / Conference" },
+  { id:"meta",      label:"MET\u00c0 CLASS.",color:"#c084fc", desc:"Stagione tranquilla" },
+  { id:"salvezza",  label:"SALVEZZA",       color:"#f0922b", desc:"Zona salvezza" },
+  { id:"retro",     label:"RETROCESSIONE",  color:"#e84040", desc:"Scende in Serie B" },
 ];
 
 const MARKET_TIERS = [
@@ -61,19 +61,19 @@ function initFreeTiers() {
   ];
 }
 
-const LS_KEY = "tierlist_v2";
+const LS_KEY = "tierlist_v3";
 function saveLS(data) { try { localStorage.setItem(LS_KEY, JSON.stringify(data)); } catch {} }
 function loadLS() { try { return JSON.parse(localStorage.getItem(LS_KEY)); } catch { return null; } }
 
 // ═══════════════════════════════════════════════════
-// SUB-COMPONENTS
+// COMPONENTS
 // ═══════════════════════════════════════════════════
 
 function TeamLogo({ team, size }) {
   const [err, setErr] = useState(false);
   if (!team.logo || err)
-    return <div style={{ width:size, height:size, borderRadius:"50%", background:team.color, display:"flex", alignItems:"center", justifyContent:"center", fontSize:size*.18, fontWeight:900, color:"#fff" }}>{team.short}</div>;
-  return <img src={team.logo} alt={team.name} draggable={false} style={{ width:size, height:size, objectFit:"contain", display:"block", pointerEvents:"none" }} onError={()=>setErr(true)} />;
+    return <div style={{ width:size, height:size, borderRadius:"50%", background:team.color, display:"flex", alignItems:"center", justifyContent:"center", fontSize:size*.18, fontWeight:900, color:"#fff", flexShrink:0 }}>{team.short}</div>;
+  return <img src={team.logo} alt={team.name} draggable={false} style={{ width:size, height:size, objectFit:"contain", display:"block", pointerEvents:"none", flexShrink:0 }} onError={()=>setErr(true)} />;
 }
 
 function Tooltip({ text, children }) {
@@ -93,9 +93,9 @@ function Tooltip({ text, children }) {
   );
 }
 
-function Btn({ color, onClick, children, textColor }) {
+function Btn({ color, onClick, children, textColor, title }) {
   return (
-    <button onClick={onClick} style={{ background:`${color}18`, border:`1px solid ${color}55`, color:textColor||color, padding:"7px 13px", borderRadius:8, fontSize:12, fontWeight:600, cursor:"pointer" }}>
+    <button onClick={onClick} title={title} style={{ background:`${color}18`, border:`1px solid ${color}55`, color:textColor||color, padding:"7px 13px", borderRadius:8, fontSize:12, fontWeight:600, cursor:"pointer" }}>
       {children}
     </button>
   );
@@ -139,15 +139,37 @@ function FreeCard({ item, onRemove, isSel, onClick, accent }) {
 export default function App() {
   const [mode, setMode]   = useState("tier");
   const [dark, setDark]   = useState(true);
+  const [showArgs, setShowArgs] = useState(false); // switch argomentazioni
+  const [args, setArgs]   = useState({}); // { teamId: "testo argomento" }
   const boardRef          = useRef(null);
 
   const [pl, setPl]       = useState(() => { const s=loadLS(); return s?.pl || { tier:empty(TIER_TIERS), market:empty(MARKET_TIERS) }; });
   const [pools, setPools] = useState(() => { const s=loadLS(); return s?.pools || { tier:TEAMS.map(t=>t.id), market:TEAMS.map(t=>t.id) }; });
   const [selected, setSel]= useState(null);
 
-  // drag state — usiamo ref per evitare render inutili durante il drag
-  const dragRef = useRef({ id: null, fromTier: null, fromPool: false });
+  // Undo history
+  const historyRef = useRef([]);
+  function pushHistory(pl, pools) {
+    historyRef.current = [...historyRef.current.slice(-19), { pl: JSON.parse(JSON.stringify(pl)), pools: JSON.parse(JSON.stringify(pools)) }];
+  }
+  function undo() {
+    if (!historyRef.current.length) return;
+    const prev = historyRef.current[historyRef.current.length - 1];
+    historyRef.current = historyRef.current.slice(0, -1);
+    setPl(prev.pl); setPools(prev.pools); setSel(null);
+    showToast("↩ Azione annullata");
+  }
 
+  // Ctrl+Z
+  useEffect(() => {
+    const handler = e => { if ((e.ctrlKey || e.metaKey) && e.key === "z") { e.preventDefault(); undo(); } };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
+
+  const dragRef = useRef({ id: null, fromTier: null, fromIdx: null });
+
+  // Free state
   const [freeTiers, setFreeTiers]   = useState(initFreeTiers);
   const [freeItems, setFreeItems]   = useState({});
   const [freePool, setFreePool]     = useState([]);
@@ -156,10 +178,19 @@ export default function App() {
   const [editingTier, setEditingTier]   = useState(null);
   const [editTierLabel, setEditTierLabel] = useState("");
   const [editingColor, setEditingColor]   = useState(null);
+  const [showImport, setShowImport] = useState(false);
+  const [importText, setImportText] = useState("");
 
   const [quickText, setQuickText] = useState("");
   const [quickImg, setQuickImg]   = useState(null);
   const quickFileRef = useRef(null);
+
+  // Animated entries
+  const [newEntries, setNewEntries] = useState(new Set());
+  function flashEntry(id) {
+    setNewEntries(prev => new Set([...prev, id]));
+    setTimeout(() => setNewEntries(prev => { const n = new Set(prev); n.delete(id); return n; }), 500);
+  }
 
   const [toast, setToast] = useState(null);
   const showToast = useCallback((msg) => { setToast(msg); setTimeout(()=>setToast(null), 2200); }, []);
@@ -169,13 +200,15 @@ export default function App() {
     poolBg:"rgba(255,255,255,0.03)", border:"rgba(255,255,255,0.08)",
     text:"#f0f0f8", subText:"rgba(255,255,255,0.3)", accent:"#f5c842",
     inputBg:"rgba(255,255,255,0.1)", inputBorder:"rgba(255,255,255,0.25)",
-    photoBtnBg:"rgba(255,255,255,0.12)", photoBtnColor:"#e0e0e0",
+    photoBtnBg:"rgba(255,255,255,0.14)", photoBtnColor:"#e8e8e8",
+    argBg:"rgba(255,255,255,0.07)", argBorder:"rgba(255,255,255,0.15)",
   } : {
     bg:"#f0f2f5", headerBg:"#ffffff", rowBg:"#f8f8fb",
     poolBg:"#ebebef", border:"rgba(0,0,0,0.1)",
     text:"#111", subText:"rgba(0,0,0,0.4)", accent:"#d4a200",
     inputBg:"rgba(0,0,0,0.06)", inputBorder:"rgba(0,0,0,0.2)",
     photoBtnBg:"rgba(0,0,0,0.1)", photoBtnColor:"#333",
+    argBg:"rgba(0,0,0,0.05)", argBorder:"rgba(0,0,0,0.15)",
   };
 
   const TIERS      = mode==="tier" ? TIER_TIERS : MARKET_TIERS;
@@ -186,6 +219,7 @@ export default function App() {
   // ── Tier/Market ───────────────────────────────
 
   function moveTo(teamId, toTier) {
+    pushHistory(pl, pools);
     setPl(prev => {
       const tiers = {};
       TIERS.forEach(t => { tiers[t.id] = [...(prev[mode][t.id]||[])].filter(id=>id!==teamId); });
@@ -194,15 +228,14 @@ export default function App() {
       saveLS({ pl:newPl, pools });
       return newPl;
     });
-    setPools(prev => {
-      const np = { ...prev, [mode]: prev[mode].filter(id=>id!==teamId) };
-      return np;
-    });
+    setPools(prev => ({ ...prev, [mode]: prev[mode].filter(id=>id!==teamId) }));
     setSel(null);
+    flashEntry(teamId);
   }
 
   function reorderInTier(tierId, fromIdx, toIdx) {
     if (fromIdx === toIdx) return;
+    pushHistory(pl, pools);
     setPl(prev => {
       const arr = [...(prev[mode][tierId]||[])];
       const [item] = arr.splice(fromIdx, 1);
@@ -214,6 +247,7 @@ export default function App() {
   }
 
   function toPool(teamId) {
+    pushHistory(pl, pools);
     setPl(prev => {
       const tiers = {};
       TIERS.forEach(t => { tiers[t.id] = (prev[mode][t.id]||[]).filter(id=>id!==teamId); });
@@ -221,11 +255,23 @@ export default function App() {
       saveLS({ pl:newPl, pools });
       return newPl;
     });
-    setPools(prev => { const np = { ...prev, [mode]: [...prev[mode], teamId] }; return np; });
+    setPools(prev => ({ ...prev, [mode]: [...prev[mode], teamId] }));
     setSel(null);
   }
 
+  function clearTier(tierId) {
+    pushHistory(pl, pools);
+    const teamsInTier = placements[tierId] || [];
+    setPl(prev => {
+      const newPl = { ...prev, [mode]: { ...prev[mode], [tierId]: [] } };
+      saveLS({ pl:newPl, pools });
+      return newPl;
+    });
+    setPools(prev => ({ ...prev, [mode]: [...prev[mode], ...teamsInTier] }));
+  }
+
   function randomize() {
+    pushHistory(pl, pools);
     const ids = [...TEAMS.map(t=>t.id)].sort(()=>Math.random()-.5);
     const n = TIERS.length, sizes = Array(n).fill(Math.floor(ids.length/n));
     let rem = ids.length%n; for(let i=0;i<rem;i++) sizes[i]++;
@@ -238,6 +284,7 @@ export default function App() {
   }
 
   function resetTM() {
+    pushHistory(pl, pools);
     const newPl = {...pl, [mode]:empty(TIERS)};
     const newPools = {...pools, [mode]:TEAMS.map(t=>t.id)};
     setPl(newPl); setPools(newPools); setSel(null);
@@ -262,6 +309,7 @@ export default function App() {
     });
     setFreePool(prev => prev.filter(x=>x.id!==item.id));
     setFreeSel(null);
+    flashEntry(item.id);
   }
 
   function freeRemove(item, tierId) {
@@ -285,8 +333,27 @@ export default function App() {
     reader.readAsDataURL(file);
   }
 
+  function importFromText() {
+    if (!importText.trim()) return;
+    const items = importText.split(/[,\n;]+/).map(s=>s.trim()).filter(Boolean)
+      .map(text => ({ id:mkId(), text, img:null }));
+    setFreePool(prev => [...prev, ...items]);
+    setImportText(""); setShowImport(false);
+    showToast(`${items.length} elementi importati!`);
+  }
+
   function addFreeTier() {
     setFreeTiers(prev => [...prev, { id:mkId(), label:"Nuova", color:FREE_COLORS[prev.length % FREE_COLORS.length] }]);
+  }
+
+  function duplicateFreeTier(tier) {
+    const newTier = { id:mkId(), label:tier.label+" 2", color:tier.color };
+    setFreeTiers(prev => {
+      const idx = prev.findIndex(t=>t.id===tier.id);
+      const next = [...prev];
+      next.splice(idx+1, 0, newTier);
+      return next;
+    });
   }
 
   function removeFreeTier(tierId) {
@@ -328,49 +395,80 @@ export default function App() {
   const placed = mode==="free" ? Object.values(freeItems).flat().length : Object.values(placements).flat().length;
   const total  = mode==="free" ? (freePool.length+placed) : TEAMS.length;
 
-  // ── Serie A card ──────────────────────────────
-  function Card({ teamId, inTier, tierId, tierIdx }) {
+  // Calcola badge globale: numero progressivo per squadra in fascia
+  function getGlobalBadge(tierId, idx) {
+    let count = 0;
+    for (const tier of TIERS) {
+      const items = placements[tier.id] || [];
+      if (tier.id === tierId) return count + idx + 1;
+      count += items.length;
+    }
+    return null;
+  }
+
+  // ── Card Serie A ──────────────────────────────
+  function Card({ teamId, inTier, tierId, tierIdx, tierColor }) {
     const t = getTeam(teamId); if (!t) return null;
-    const isSel = selected===teamId;
+    const isSel  = selected === teamId;
+    const isNew  = newEntries.has(teamId);
+    const argVal = args[teamId] || "";
 
     function handleDragStart(e) {
-      // Salviamo le info nel ref (non in stato → nessun re-render durante il drag)
       dragRef.current = { id: teamId, fromTier: inTier ? tierId : null, fromIdx: tierIdx };
       e.dataTransfer.effectAllowed = "move";
-      e.dataTransfer.setData("text/plain", teamId); // necessario per Firefox
-    }
-
-    function handleDragEnd() {
-      dragRef.current = { id: null, fromTier: null, fromPool: false };
+      e.dataTransfer.setData("text/plain", teamId);
     }
 
     return (
-      <Tooltip text={t.name}>
-        <div
-          draggable
-          onDragStart={handleDragStart}
-          onDragEnd={handleDragEnd}
-          onClick={e=>{e.stopPropagation();if(isSel){setSel(null);}else{setSel(teamId);}}}
-          style={{ width:60, height:60, flexShrink:0, borderRadius:10, overflow:"hidden",
-            position:"relative", cursor:"grab", userSelect:"none",
-            border:isSel?`3px solid ${D.accent}`:`2px solid rgba(255,255,255,0.1)`,
-            boxShadow:isSel?`0 0 16px ${D.accent}88`:"0 2px 6px rgba(0,0,0,0.25)",
-            transition:"border .15s, box-shadow .15s",
-            display:"flex", alignItems:"center", justifyContent:"center",
-          }}>
-          <TeamLogo team={t} size={60} />
-          {inTier && (
-            <button onClick={e=>{e.stopPropagation();toPool(teamId);}}
-              style={{ position:"absolute",top:2,right:2,width:15,height:15,borderRadius:"50%",background:"#e84040dd",border:"none",color:"#fff",fontSize:9,fontWeight:900,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",padding:0 }}>×</button>
-          )}
-        </div>
-      </Tooltip>
+      <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:4, flexShrink:0 }}>
+        <Tooltip text={t.name}>
+          <div
+            draggable
+            onDragStart={handleDragStart}
+            onDragEnd={()=>{ dragRef.current = { id:null, fromTier:null, fromIdx:null }; }}
+            onClick={e=>{ e.stopPropagation(); if(isSel){setSel(null);}else{setSel(teamId);} }}
+            style={{ width:60, height:60, flexShrink:0, borderRadius:10, overflow:"hidden",
+              position:"relative", cursor:"grab", userSelect:"none",
+              border:isSel?`3px solid ${D.accent}`:`2px solid rgba(255,255,255,0.1)`,
+              boxShadow:isSel?`0 0 16px ${D.accent}88`:"0 2px 6px rgba(0,0,0,0.25)",
+              transition:"border .15s, box-shadow .15s, transform .3s",
+              transform: isNew ? "scale(1.15)" : "scale(1)",
+              display:"flex", alignItems:"center", justifyContent:"center",
+            }}>
+            <TeamLogo team={t} size={60} />
+            {/* × sempre visibile */}
+            {inTier && (
+              <button onClick={e=>{e.stopPropagation();toPool(teamId);}}
+                style={{ position:"absolute",top:2,right:2,width:16,height:16,borderRadius:"50%",background:"#e84040",border:"2px solid rgba(0,0,0,0.3)",color:"#fff",fontSize:10,fontWeight:900,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",padding:0,lineHeight:1 }}>×</button>
+            )}
+            {/* Badge numero */}
+            {inTier && (
+              <div style={{ position:"absolute",bottom:2,left:2,background:"rgba(0,0,0,0.65)",borderRadius:4,fontSize:8,fontWeight:700,color:"#fff",padding:"1px 4px",lineHeight:1.4 }}>
+                {getGlobalBadge(tierId, tierIdx)}
+              </div>
+            )}
+          </div>
+        </Tooltip>
+        {/* Argomentazione */}
+        {showArgs && inTier && (
+          <textarea
+            value={argVal}
+            onChange={e=>setArgs(prev=>({...prev,[teamId]:e.target.value}))}
+            onClick={e=>e.stopPropagation()}
+            onDragStart={e=>e.stopPropagation()}
+            placeholder="Motivazione…"
+            rows={2}
+            style={{ width:80, fontSize:9, padding:"3px 5px", borderRadius:6, border:`1px solid ${D.argBorder}`,
+              background:D.argBg, color:D.text, resize:"none", outline:"none", lineHeight:1.3, fontFamily:"inherit" }}
+          />
+        )}
+      </div>
     );
   }
 
   // ── Tier row ──────────────────────────────────
   function TierRow({ tier }) {
-    const tierTeams = placements[tier.id]||[];
+    const tierTeams = placements[tier.id] || [];
     const [isOver, setIsOver] = useState(false);
     const [overIdx, setOverIdx] = useState(null);
 
@@ -387,8 +485,7 @@ export default function App() {
       e.preventDefault();
       e.dataTransfer.dropEffect = "move";
       setIsOver(true);
-      const idx = getDropIdx(e, e.currentTarget);
-      setOverIdx(idx);
+      setOverIdx(getDropIdx(e, e.currentTarget));
     }
 
     function handleDrop(e) {
@@ -396,56 +493,56 @@ export default function App() {
       const { id, fromTier, fromIdx } = dragRef.current;
       if (!id) return;
       const dropIdx = getDropIdx(e, e.currentTarget);
-
       if (fromTier === tier.id) {
-        // riordino dentro la stessa fascia
         reorderInTier(tier.id, fromIdx, dropIdx > fromIdx ? dropIdx - 1 : dropIdx);
       } else {
-        // sposta da altra fascia o dal pool
         moveTo(id, tier.id);
       }
-      dragRef.current = { id: null, fromTier: null };
+      dragRef.current = { id:null, fromTier:null, fromIdx:null };
       setIsOver(false); setOverIdx(null);
     }
 
     return (
-      <div style={{ display:"flex", borderBottom:`1px solid ${D.border}`, minHeight:84 }}>
-        {/* Label — cliccabile per inserire selezionato */}
+      <div style={{ display:"flex", borderBottom:`1px solid ${D.border}`, minHeight:showArgs?110:84 }}>
+        {/* Label */}
         <div
           style={{ width:115, minWidth:115,
             background:dark?`linear-gradient(90deg,${tier.color}28,${tier.color}08)`:`linear-gradient(90deg,${tier.color}35,${tier.color}10)`,
             borderRight:`4px solid ${tier.color}`,
             display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center",
-            padding:"6px 6px", cursor:selected?"pointer":"default",
+            padding:"6px 4px", cursor:selected?"pointer":"default",
           }}
           onClick={()=>{ if(selected) moveTo(selected, tier.id); }}
         >
           <div style={{ fontSize:11, fontWeight:900, color:tier.color, textAlign:"center", lineHeight:1.2, letterSpacing:0.3, textShadow:dark?`0 0 14px ${tier.color}55`:"none" }}>{tier.label}</div>
           <div style={{ fontSize:8, color:D.subText, marginTop:3, textAlign:"center", lineHeight:1.3 }}>{tier.desc}</div>
-          {selected && <div style={{ fontSize:8, color:tier.color, marginTop:4, opacity:.8 }}>↓ inserisci</div>}
+          <div style={{ fontSize:9, color:D.subText, marginTop:2 }}>{tierTeams.length > 0 ? `${tierTeams.length} squad.` : ""}</div>
+          {selected && <div style={{ fontSize:8, color:tier.color, marginTop:3, opacity:.9 }}>↓ inserisci</div>}
+          {/* Svuota fascia */}
+          {tierTeams.length > 0 && (
+            <button onClick={e=>{e.stopPropagation();clearTier(tier.id);}} title="Svuota fascia"
+              style={{ marginTop:4, background:"none", border:"none", color:"rgba(255,255,255,0.25)", fontSize:10, cursor:"pointer", padding:0 }}>
+              ✕ svuota
+            </button>
+          )}
         </div>
 
         {/* Drop area */}
         <div
           style={{ flex:1, display:"flex", flexWrap:"wrap", alignItems:"center", padding:"10px 8px", gap:8,
-            background:isOver?(dark?`${tier.color}20`:`${tier.color}18`):D.rowBg, transition:"background .15s",
-            position:"relative" }}
+            background:isOver?(dark?`${tier.color}20`:`${tier.color}18`):D.rowBg, transition:"background .15s" }}
           onDragOver={handleDragOver}
           onDragLeave={e=>{ if(!e.currentTarget.contains(e.relatedTarget)){setIsOver(false);setOverIdx(null);} }}
           onDrop={handleDrop}
           onClick={()=>{ if(selected) moveTo(selected, tier.id); }}
         >
           {tierTeams.map((tid, idx) => (
-            <div key={tid} data-cardidx={idx} style={{ display:"flex", alignItems:"center", gap:0 }}>
-              {/* Indicatore di drop */}
-              {isOver && overIdx === idx && (
-                <div style={{ width:3, height:52, background:tier.color, borderRadius:2, marginRight:4 }} />
-              )}
-              <Card teamId={tid} inTier tierId={tier.id} tierIdx={idx} />
+            <div key={tid} data-cardidx={idx} style={{ display:"flex", alignItems:"center" }}>
+              {isOver && overIdx===idx && <div style={{ width:3, height:52, background:tier.color, borderRadius:2, marginRight:4 }} />}
+              <Card teamId={tid} inTier tierId={tier.id} tierIdx={idx} tierColor={tier.color} />
             </div>
           ))}
-          {/* Indicatore di drop in fondo */}
-          {isOver && overIdx === tierTeams.length && tierTeams.length > 0 && (
+          {isOver && overIdx===tierTeams.length && tierTeams.length>0 && (
             <div style={{ width:3, height:52, background:tier.color, borderRadius:2 }} />
           )}
         </div>
@@ -455,7 +552,7 @@ export default function App() {
 
   // ── Free row ──────────────────────────────────
   function FreeRow({ tier }) {
-    const items = freeItems[tier.id]||[];
+    const items = freeItems[tier.id] || [];
     const [isOver, setIsOver] = useState(false);
 
     return (
@@ -463,7 +560,7 @@ export default function App() {
         <div style={{ width:115, minWidth:115,
           background:dark?`linear-gradient(90deg,${tier.color}28,${tier.color}08)`:`linear-gradient(90deg,${tier.color}35,${tier.color}10)`,
           borderRight:`4px solid ${tier.color}`,
-          display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:"6px 4px", gap:4 }}>
+          display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:"6px 4px", gap:3 }}>
 
           {editingTier===tier.id ? (
             <input autoFocus value={editTierLabel} onChange={e=>setEditTierLabel(e.target.value)}
@@ -495,8 +592,13 @@ export default function App() {
           </div>
 
           {freeSel && <div style={{ fontSize:8, color:tier.color }}>↓ inserisci</div>}
-          <button onClick={()=>removeFreeTier(tier.id)} title="Rimuovi fascia"
-            style={{ background:"none", border:"none", color:"#e84040aa", fontSize:11, cursor:"pointer", padding:0, lineHeight:1 }}>🗑️</button>
+
+          <div style={{ display:"flex", gap:4, marginTop:2 }}>
+            <button onClick={()=>duplicateFreeTier(tier)} title="Duplica fascia"
+              style={{ background:"none", border:"none", color:"rgba(255,255,255,0.3)", fontSize:11, cursor:"pointer", padding:0 }}>⧉</button>
+            <button onClick={()=>removeFreeTier(tier.id)} title="Rimuovi fascia"
+              style={{ background:"none", border:"none", color:"#e84040aa", fontSize:11, cursor:"pointer", padding:0 }}>🗑️</button>
+          </div>
         </div>
 
         <div style={{ flex:1, display:"flex", flexWrap:"wrap", alignItems:"center", padding:"10px 8px", gap:8,
@@ -565,6 +667,7 @@ export default function App() {
           {mode!=="free"&&<span style={{ marginLeft:8, fontSize:10 }}>· 💾 auto-salvato</span>}
         </div>
 
+        {/* Mode tabs */}
         <div style={{ display:"inline-flex", marginTop:12, background:dark?"rgba(255,255,255,0.06)":"rgba(0,0,0,0.06)", borderRadius:8, padding:3 }}>
           {[["tier","⚽ Tier List"],["market","💰 Voti Mercato"],["free","✏️ Libera"]].map(([m,lbl])=>(
             <button key={m} onClick={()=>{setMode(m);setSel(null);setFreeSel(null);setEditingColor(null);}}
@@ -575,24 +678,39 @@ export default function App() {
           ))}
         </div>
 
+        {/* Actions */}
         <div style={{ display:"flex", gap:8, justifyContent:"center", marginTop:10, flexWrap:"wrap", alignItems:"center" }}>
           <button onClick={()=>setDark(d=>!d)}
             style={{ padding:"6px 12px", borderRadius:8, border:`1px solid ${D.border}`, background:dark?"rgba(255,255,255,0.06)":"rgba(0,0,0,0.06)", color:D.text, fontSize:14, cursor:"pointer" }}>
             {dark?"☀️":"🌙"}
           </button>
-          {mode!=="free"&&<Btn color="#f5c842" onClick={randomize}>🎲 Riempi a caso</Btn>}
+
+          {/* Switch argomentazioni — solo tier e market */}
+          {mode!=="free" && (
+            <div style={{ display:"flex", alignItems:"center", gap:6, padding:"6px 12px", borderRadius:8, border:`1px solid ${D.border}`, background:dark?"rgba(255,255,255,0.04)":"rgba(0,0,0,0.04)" }}>
+              <span style={{ fontSize:11, color:D.subText, whiteSpace:"nowrap" }}>Motivazioni</span>
+              <div onClick={()=>setShowArgs(v=>!v)}
+                style={{ width:34, height:18, borderRadius:9, background:showArgs?D.accent:"rgba(255,255,255,0.15)", cursor:"pointer", position:"relative", transition:"background .2s", flexShrink:0 }}>
+                <div style={{ position:"absolute", top:2, left:showArgs?16:2, width:14, height:14, borderRadius:"50%", background:"#fff", transition:"left .2s", boxShadow:"0 1px 3px rgba(0,0,0,0.3)" }} />
+              </div>
+            </div>
+          )}
+
+          {mode!=="free"&&<Btn color="#f5c842" onClick={randomize}>🎲 Riempi</Btn>}
+          {mode!=="free"&&<Btn color="#888" textColor={dark?"#ccc":"#444"} onClick={undo} title="Annulla ultima azione (Ctrl+Z)">↩ Undo</Btn>}
           {mode==="free"&&<Btn color="#3dbb6e" onClick={addFreeTier}>+ Fascia</Btn>}
+          {mode==="free"&&<Btn color="#a78bfa" onClick={()=>setShowImport(true)}>⬆ Importa lista</Btn>}
           <Btn color={dark?"#bbb":"#555"} textColor={dark?"#ccc":"#444"} onClick={mode==="free"?resetFree:resetTM}>↺ Svuota</Btn>
-          {mode!=="free"&&<Btn color="#a78bfa" onClick={copyLink}>🔗 Copia link</Btn>}
-          <Btn color="#3dbb6e" onClick={saveImage}>⬇ Salva PNG</Btn>
-          <Btn color="#5ba3f5" onClick={shareX}>𝕏 Twitter</Btn>
+          {mode!=="free"&&<Btn color="#a78bfa" onClick={copyLink}>🔗 Link</Btn>}
+          <Btn color="#3dbb6e" onClick={saveImage}>⬇ PNG</Btn>
+          <Btn color="#5ba3f5" onClick={shareX}>𝕏</Btn>
         </div>
       </div>
 
       <div style={{ textAlign:"center", padding:"7px 12px 0", fontSize:10, color:D.subText, minHeight:20 }}>
         {mode==="free"
-          ?(freeSel?"Elemento selezionato — tocca la fascia o trascinalo":"Doppio click sul nome fascia per rinominarlo · 🎨 colore · trascina o tocca per inserire")
-          :(selected?`${getTeam(selected)?.name} selezionato — tocca la fascia per inserirlo`:"Trascina nella fascia oppure tocca il logo poi la fascia · Trascina per riordinare")}
+          ?(freeSel?"Elemento selezionato — tocca la fascia o trascinalo":"Doppio click sul nome fascia per rinominarlo · 🎨 colore · ⧉ duplica")
+          :(selected?`${getTeam(selected)?.name} selezionato — tocca la fascia per inserirlo`:"Trascina nella fascia o tocca logo → fascia · Trascina per riordinare · × per rimuovere")}
       </div>
 
       {/* BOARD */}
@@ -605,7 +723,7 @@ export default function App() {
           }
         </div>
 
-        {/* POOL */}
+        {/* POOL — scroll orizzontale su mobile */}
         <div style={{ marginTop:12, background:D.poolBg, borderRadius:14, border:`1px solid ${D.border}`, padding:"12px 14px" }}
           onDragOver={e=>e.preventDefault()}
           onDrop={e=>{
@@ -618,7 +736,7 @@ export default function App() {
               freeDragRef.current=null;
             } else {
               const { id } = dragRef.current;
-              if(id) { toPool(id); dragRef.current={id:null,fromTier:null}; }
+              if(id){ toPool(id); dragRef.current={id:null,fromTier:null,fromIdx:null}; }
             }
           }}>
 
@@ -626,33 +744,32 @@ export default function App() {
             Da posizionare ({mode==="free"?freePool.length:pool.length})
           </div>
 
-          {/* Quick add — solo modalità libera */}
+          {/* Quick add — solo free */}
           {mode==="free" && (
             <div style={{ display:"flex", gap:8, marginBottom:14, alignItems:"center", flexWrap:"wrap" }}>
               <input value={quickText} onChange={e=>setQuickText(e.target.value)}
                 onKeyDown={e=>{if(e.key==="Enter")quickAdd();}}
                 placeholder="Nome elemento…"
-                style={{ flex:1, minWidth:140, padding:"7px 10px", borderRadius:8, border:`1px solid ${D.inputBorder}`, background:D.inputBg, color:D.text, fontSize:12, outline:"none" }}
+                style={{ flex:1, minWidth:130, padding:"7px 10px", borderRadius:8, border:`1px solid ${D.inputBorder}`, background:D.inputBg, color:D.text, fontSize:12, outline:"none" }}
               />
               <label style={{ padding:"7px 14px", borderRadius:8, border:`1px solid ${D.inputBorder}`,
-                background:D.photoBtnBg, color:D.photoBtnColor,
-                fontSize:12, fontWeight:600, cursor:"pointer", whiteSpace:"nowrap", userSelect:"none" }}>
-                {quickImg ? "📷 ✓" : "📷 Foto"}
+                background:D.photoBtnBg, color:D.photoBtnColor, fontSize:12, fontWeight:600, cursor:"pointer", whiteSpace:"nowrap", userSelect:"none" }}>
+                {quickImg?"📷 ✓":"📷 Foto"}
                 <input ref={quickFileRef} type="file" accept="image/*" onChange={handleQuickImg} style={{ display:"none" }} />
               </label>
-              {quickImg && (
-                <button onClick={()=>{setQuickImg(null);if(quickFileRef.current)quickFileRef.current.value="";}}
-                  style={{ background:"none", border:"none", color:"#e84040", cursor:"pointer", fontSize:14, padding:0 }}>✕</button>
-              )}
+              {quickImg && <button onClick={()=>{setQuickImg(null);if(quickFileRef.current)quickFileRef.current.value="";}} style={{ background:"none",border:"none",color:"#e84040",cursor:"pointer",fontSize:14,padding:0 }}>✕</button>}
               <button onClick={quickAdd} disabled={!quickText.trim()&&!quickImg}
-                style={{ padding:"7px 16px", borderRadius:8, border:"none", background:D.accent, color:"#0d0d1a", fontWeight:700, fontSize:12,
-                  cursor:(!quickText.trim()&&!quickImg)?"not-allowed":"pointer", opacity:(!quickText.trim()&&!quickImg)?0.5:1 }}>
+                style={{ padding:"7px 14px", borderRadius:8, border:"none", background:D.accent, color:"#0d0d1a", fontWeight:700, fontSize:12, cursor:(!quickText.trim()&&!quickImg)?"not-allowed":"pointer", opacity:(!quickText.trim()&&!quickImg)?0.5:1 }}>
                 + Aggiungi
               </button>
             </div>
           )}
 
-          <div style={{ display:"flex", flexWrap:"wrap", gap:8, minHeight:44 }}>
+          {/* Cards — scroll orizzontale su mobile */}
+          <div style={{ display:"flex", flexWrap:"wrap", gap:8, minHeight:44,
+            overflowX:"auto", WebkitOverflowScrolling:"touch",
+            /* su mobile (max 600px) non wrappa e scorre */
+          }}>
             {mode==="free" ? (
               freePool.length===0
                 ? <div style={{ color:D.subText, fontSize:12, alignSelf:"center" }}>Tutti gli elementi posizionati ✔</div>
@@ -678,6 +795,31 @@ export default function App() {
           Creato con ❤️ da <span style={{ color:D.accent }}>universosportivo.com</span> — nessun dato lascia il browser.
         </div>
       </div>
+
+      {/* MODAL importa lista */}
+      {showImport && (
+        <div onClick={()=>setShowImport(false)} style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.82)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,backdropFilter:"blur(4px)" }}>
+          <div onClick={e=>e.stopPropagation()} style={{ background:dark?"#161628":"#fff",border:`1px solid ${D.border}`,borderRadius:16,padding:24,maxWidth:380,width:"92%",boxShadow:"0 20px 60px rgba(0,0,0,0.6)" }}>
+            <div style={{ fontWeight:800,fontSize:16,color:D.text,marginBottom:8 }}>Importa lista elementi</div>
+            <div style={{ fontSize:11,color:D.subText,marginBottom:12 }}>Incolla i nomi separati da virgola, punto e virgola o a capo</div>
+            <textarea value={importText} onChange={e=>setImportText(e.target.value)}
+              placeholder={"Messi, Ronaldo, Mbappé\nKantè\nHaaland"}
+              rows={5}
+              style={{ width:"100%",padding:"8px 10px",borderRadius:8,border:`1px solid ${D.inputBorder}`,background:D.inputBg,color:D.text,fontSize:13,outline:"none",resize:"vertical",fontFamily:"inherit" }}
+            />
+            <div style={{ display:"flex",gap:10,marginTop:14 }}>
+              <button onClick={importFromText} disabled={!importText.trim()}
+                style={{ flex:1,padding:"10px",borderRadius:8,border:"none",background:D.accent,color:"#0d0d1a",fontWeight:700,fontSize:13,cursor:importText.trim()?"pointer":"not-allowed",opacity:importText.trim()?1:0.5 }}>
+                Importa
+              </button>
+              <button onClick={()=>{setShowImport(false);setImportText("");}}
+                style={{ padding:"10px 16px",borderRadius:8,border:`1px solid ${D.border}`,background:"transparent",color:D.subText,fontWeight:600,fontSize:13,cursor:"pointer" }}>
+                Annulla
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
