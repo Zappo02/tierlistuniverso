@@ -166,12 +166,12 @@ function ArgBox({ teamId, argsRef, D, tierColor, argsMode }) {
         onKeyDown={e => e.stopPropagation()}
         placeholder="Motivazione…"
         rows={1}
-        style={{ width:84, fontSize:9, padding:"3px 6px", borderRadius:6,
-          border:`1px solid ${tierColor}55`,
-          background:`${tierColor}18`,
+        style={{ width:88, fontSize:10, padding:"5px 6px", borderRadius:6,
+          border:`1px solid ${tierColor}66`,
+          background:`${tierColor}22`,
           color: tierColor,
-          resize:"none", outline:"none", lineHeight:1.4, fontFamily:"inherit",
-          textAlign:"center", overflow:"hidden", display:"block" }}
+          resize:"none", outline:"none", lineHeight:1.5, fontFamily:"'Inter','Segoe UI',sans-serif",
+          textAlign:"center", overflow:"hidden", display:"block", minHeight:28, fontWeight:600 }}
       />
     </div>
   );
@@ -443,10 +443,12 @@ export default function App() {
     if (!tiersRef.current) return;
     const canvas = await html2canvas(tiersRef.current, { backgroundColor:dark?"#0d0d1a":"#f0f2f5", scale:2, useCORS:true, allowTaint:true });
     const ctx = canvas.getContext("2d");
-    ctx.font = `bold ${canvas.width*.016}px Inter,sans-serif`;
-    ctx.fillStyle = "rgba(255,255,255,0.28)";
-    ctx.textAlign = "right";
-    ctx.fillText("universosportivo.com", canvas.width-14, canvas.height-12);
+    // Watermark basso-sinistra
+    const wSize = Math.round(canvas.width * 0.022);
+    ctx.font = `bold ${wSize}px Inter,sans-serif`;
+    ctx.fillStyle = "#c9a84c";
+    ctx.textAlign = "left";
+    ctx.fillText("universosportivo.com", 16, canvas.height - 14);
     // Blob URL — non ha problemi di popup né di data URL troppo lungo
     canvas.toBlob(blob => {
       const url = URL.createObjectURL(blob);
@@ -795,7 +797,7 @@ export default function App() {
 
       {/* BOARD */}
       <div ref={boardRef} style={{ maxWidth:880, margin:"10px auto 0", padding:"0 8px 16px" }}>
-        <div style={{ textAlign:"right", fontSize:9, color:D.subText, opacity:.4, marginBottom:3, paddingRight:4 }}>universosportivo.com</div>
+        <div style={{ textAlign:"center", fontSize:11, color:D.accent, fontWeight:700, letterSpacing:3, marginBottom:6, opacity:.9, textTransform:"uppercase" }}>universosportivo.com</div>
         <div ref={tiersRef} style={{ borderRadius:14, overflow:"hidden", border:`1px solid ${D.border}`, boxShadow:dark?"0 8px 40px rgba(0,0,0,0.4)":"0 4px 20px rgba(0,0,0,0.08)" }}>
           {mode==="free"
             ? freeTiers.map(tier=><FreeRow key={tier.id} tier={tier} />)
