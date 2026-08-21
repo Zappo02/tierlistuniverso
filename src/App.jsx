@@ -150,7 +150,7 @@ function ArgBox({ teamId, argsRef, D }) {
       rows={2}
       style={{ width:80, fontSize:9, padding:"3px 5px", borderRadius:6,
         border:`1px solid ${D.argBorder}`, background:D.argBg, color:D.text,
-        resize:"none", outline:"none", lineHeight:1.3, fontFamily:"inherit" }}
+        resize:"none", outline:"none", lineHeight:1.3, fontFamily:"inherit", textAlign:"center" }}
     />
   );
 }
@@ -424,10 +424,14 @@ export default function App() {
     ctx.fillStyle = "rgba(255,255,255,0.3)";
     ctx.textAlign = "right";
     ctx.fillText("universosportivo.com", canvas.width-14, canvas.height-12);
-    const a = document.createElement("a");
-    a.download = {tier:"TierList",market:"Mercato",free:"TierListLibera"}[mode]+"-SerieA.png";
-    a.href = canvas.toDataURL("image/png"); a.click();
-    showToast("🖼️ PNG salvato!");
+    const dataUrl = canvas.toDataURL("image/png");
+    // Apri in nuovo tab — così vedi subito l'immagine e salvi da lì
+    const win = window.open("", "_blank");
+    if (win) {
+      win.document.write(`<!DOCTYPE html><html><head><title>Tier List - universosportivo.com</title><style>body{margin:0;background:#0d0d1a;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif}img{max-width:100%;border-radius:12px;box-shadow:0 8px 40px rgba(0,0,0,0.6)}p{color:#888;font-size:13px;margin-top:14px}a{color:#f5c842;text-decoration:none;font-weight:700}</style></head><body><img src="${dataUrl}"/><p>Tasto destro → <strong>Salva immagine</strong> oppure <a href="${dataUrl}" download="TierList-SerieA.png">clicca qui per scaricarla</a></p></body></html>`);
+      win.document.close();
+    }
+    showToast("🖼️ Immagine aperta nel browser!");
   }
 
   function shareX() {
