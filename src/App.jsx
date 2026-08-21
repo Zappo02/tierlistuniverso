@@ -166,12 +166,13 @@ function ArgBox({ teamId, argsRef, D, tierColor, argsMode }) {
         onKeyDown={e => e.stopPropagation()}
         placeholder="Motivazione…"
         rows={1}
-        style={{ width:88, fontSize:10, padding:"5px 6px", borderRadius:6,
+        style={{ width:60, fontSize:9, padding:"4px 4px", borderRadius:6,
           border:`1px solid ${tierColor}66`,
           background:`${tierColor}22`,
           color: tierColor,
-          resize:"none", outline:"none", lineHeight:1.5, fontFamily:"'Inter','Segoe UI',sans-serif",
-          textAlign:"center", overflow:"hidden", display:"block", minHeight:28, fontWeight:600 }}
+          resize:"none", outline:"none", lineHeight:1.4, fontFamily:"'Inter','Segoe UI',sans-serif",
+          textAlign:"center", overflow:"hidden", display:"block", minHeight:24,
+          fontWeight:600, wordBreak:"break-word", whiteSpace:"pre-wrap" }}
       />
     </div>
   );
@@ -495,7 +496,7 @@ export default function App() {
     }
 
     return (
-      <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:4, flexShrink:0 }}>
+      <div style={{ display:"flex", flexDirection:(showArgs!=="off")?"row":"column", alignItems:"center", gap:4, flexShrink:0 }}>
         <Tooltip text={t.name}>
           <div
             draggable
@@ -569,7 +570,7 @@ export default function App() {
     }
 
     return (
-      <div style={{ display:"flex", borderBottom:`1px solid ${D.border}`, minHeight:(showArgs !== "off") ? 110 : 84 }}>
+      <div style={{ display:"flex", borderBottom:`1px solid ${D.border}`, minHeight:84 }}>
         {/* Label */}
         <div
           style={{ width:115, minWidth:115,
