@@ -132,26 +132,48 @@ function FreeCard({ item, onRemove, isSel, onClick, accent }) {
   );
 }
 
-// Textarea motivazione — uncontrolled: legge/scrive su ref, nessun re-render globale
-function ArgBox({ teamId, argsRef, D }) {
+// ArgBox — uncontrolled, auto-resize, colore fascia, solo se ha testo in modalità "fatto"
+function ArgBox({ teamId, argsRef, D, tierColor, argsMode }) {
   const localRef = useRef(null);
+  const [editing, setEditing] = useState(false);
+  const [hasText, setHasText] = useState(!!(argsRef.current[teamId]));
+
   useEffect(() => {
-    if (localRef.current) localRef.current.value = argsRef.current[teamId] || "";
+    if (localRef.current) {
+      localRef.current.value = argsRef.current[teamId] || "";
+      autoResize(localRef.current);
+    }
   }, [teamId]);
+
+  function autoResize(el) {
+    el.style.height = "auto";
+    el.style.height = el.scrollHeight + "px";
+  }
+
+  // In modalità "fatto": mostra solo se c'è testo, oppure se stai editando
+  if (argsMode === "fatto" && !hasText && !editing) return null;
+
   return (
-    <textarea
-      ref={localRef}
-      defaultValue={argsRef.current[teamId] || ""}
-      onBlur={e => { argsRef.current[teamId] = e.target.value; }}
-      onClick={e => e.stopPropagation()}
-      onDragStart={e => e.stopPropagation()}
-      onKeyDown={e => e.stopPropagation()}
-      placeholder="Motivazione…"
-      rows={2}
-      style={{ width:80, fontSize:9, padding:"3px 5px", borderRadius:6,
-        border:`1px solid ${D.argBorder}`, background:D.argBg, color:D.text,
-        resize:"none", outline:"none", lineHeight:1.3, fontFamily:"inherit", textAlign:"center" }}
-    />
+    <div style={{ position:"relative" }}>
+      <textarea
+        ref={localRef}
+        defaultValue={argsRef.current[teamId] || ""}
+        onFocus={() => setEditing(true)}
+        onChange={e => { argsRef.current[teamId] = e.target.value; autoResize(e.target); }}
+        onBlur={e => { argsRef.current[teamId] = e.target.value; setEditing(false); setHasText(!!e.target.value.trim()); }}
+        onClick={e => e.stopPropagation()}
+        onDragStart={e => e.stopPropagation()}
+        onKeyDown={e => e.stopPropagation()}
+        placeholder="Motivazione…"
+        rows={1}
+        style={{ width:84, fontSize:9, padding:"3px 6px", borderRadius:6,
+          border:`1px solid ${tierColor}55`,
+          background:`${tierColor}18`,
+          color: tierColor,
+          resize:"none", outline:"none", lineHeight:1.4, fontFamily:"inherit",
+          textAlign:"center", overflow:"hidden", display:"block" }}
+      />
+    </div>
   );
 }
 
@@ -162,9 +184,10 @@ function ArgBox({ teamId, argsRef, D }) {
 export default function App() {
   const [mode, setMode]   = useState("tier");
   const [dark, setDark]   = useState(true);
-  const [showArgs, setShowArgs] = useState(false); // switch argomentazioni
+  const [showArgs, setShowArgs] = useState("off"); // "off" | "editing" | "fatto"
   const argsRef = useRef({}); // { teamId: "testo" } — ref, non state, per evitare re-render
   const boardRef = useRef(null);
+  const tiersRef = useRef(null);
 
   const [pl, setPl]       = useState(() => { const s=loadLS(); return s?.pl || { tier:empty(TIER_TIERS), market:empty(MARKET_TIERS) }; });
   const [pools, setPools] = useState(() => { const s=loadLS(); return s?.pools || { tier:TEAMS.map(t=>t.id), market:TEAMS.map(t=>t.id) }; });
@@ -417,21 +440,25 @@ export default function App() {
   }
 
   async function saveImage() {
-    if (!boardRef.current) return;
-    const canvas = await html2canvas(boardRef.current, { backgroundColor:dark?"#0d0d1a":"#f0f2f5", scale:2, useCORS:true, allowTaint:true });
+    if (!tiersRef.current) return;
+    const canvas = await html2canvas(tiersRef.current, { backgroundColor:dark?"#0d0d1a":"#f0f2f5", scale:2, useCORS:true, allowTaint:true });
     const ctx = canvas.getContext("2d");
     ctx.font = `bold ${canvas.width*.016}px Inter,sans-serif`;
-    ctx.fillStyle = "rgba(255,255,255,0.3)";
+    ctx.fillStyle = "rgba(255,255,255,0.28)";
     ctx.textAlign = "right";
     ctx.fillText("universosportivo.com", canvas.width-14, canvas.height-12);
-    const dataUrl = canvas.toDataURL("image/png");
-    // Apri in nuovo tab — così vedi subito l'immagine e salvi da lì
-    const win = window.open("", "_blank");
-    if (win) {
-      win.document.write(`<!DOCTYPE html><html><head><title>Tier List - universosportivo.com</title><style>body{margin:0;background:#0d0d1a;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif}img{max-width:100%;border-radius:12px;box-shadow:0 8px 40px rgba(0,0,0,0.6)}p{color:#888;font-size:13px;margin-top:14px}a{color:#f5c842;text-decoration:none;font-weight:700}</style></head><body><img src="${dataUrl}"/><p>Tasto destro → <strong>Salva immagine</strong> oppure <a href="${dataUrl}" download="TierList-SerieA.png">clicca qui per scaricarla</a></p></body></html>`);
-      win.document.close();
-    }
-    showToast("🖼️ Immagine aperta nel browser!");
+    // Blob URL — non ha problemi di popup né di data URL troppo lungo
+    canvas.toBlob(blob => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = {tier:"TierList",market:"Mercato",free:"TierListLibera"}[mode]+"-SerieA.png";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+      showToast("🖼️ PNG scaricato!");
+    }, "image/png");
   }
 
   function shareX() {
@@ -495,9 +522,9 @@ export default function App() {
             )}
           </div>
         </Tooltip>
-        {/* Argomentazione — uncontrolled per evitare re-render ad ogni tasto */}
-        {showArgs && inTier && (
-          <ArgBox teamId={teamId} argsRef={argsRef} D={D} />
+        {/* Argomentazione */}
+        {(showArgs === "editing" || showArgs === "fatto") && inTier && (
+          <ArgBox teamId={teamId} argsRef={argsRef} D={D} tierColor={tierColor || D.accent} argsMode={showArgs} />
         )}
       </div>
     );
@@ -540,7 +567,7 @@ export default function App() {
     }
 
     return (
-      <div style={{ display:"flex", borderBottom:`1px solid ${D.border}`, minHeight:showArgs?110:84 }}>
+      <div style={{ display:"flex", borderBottom:`1px solid ${D.border}`, minHeight:(showArgs !== "off") ? 110 : 84 }}>
         {/* Label */}
         <div
           style={{ width:115, minWidth:115,
@@ -722,14 +749,29 @@ export default function App() {
             {dark?"☀️":"🌙"}
           </button>
 
-          {/* Switch argomentazioni — solo tier e market */}
-          {mode!=="free" && (
-            <div style={{ display:"flex", alignItems:"center", gap:6, padding:"6px 12px", borderRadius:8, border:`1px solid ${D.border}`, background:dark?"rgba(255,255,255,0.04)":"rgba(0,0,0,0.04)" }}>
-              <span style={{ fontSize:11, color:D.subText, whiteSpace:"nowrap" }}>Motivazioni</span>
-              <div onClick={()=>setShowArgs(v=>!v)}
-                style={{ width:34, height:18, borderRadius:9, background:showArgs?D.accent:"rgba(255,255,255,0.15)", cursor:"pointer", position:"relative", transition:"background .2s", flexShrink:0 }}>
-                <div style={{ position:"absolute", top:2, left:showArgs?16:2, width:14, height:14, borderRadius:"50%", background:"#fff", transition:"left .2s", boxShadow:"0 1px 3px rgba(0,0,0,0.3)" }} />
-              </div>
+          {/* Motivazioni — solo tier e market */}
+          {mode!=="free" && showArgs === "off" && (
+            <Btn color="#c084fc" onClick={()=>setShowArgs("editing")}>✏️ Motivazioni</Btn>
+          )}
+          {mode!=="free" && showArgs === "editing" && (
+            <div style={{ display:"flex", gap:6 }}>
+              <button onClick={()=>setShowArgs("fatto")}
+                style={{ padding:"7px 13px", borderRadius:8, border:"none", background:"#3dbb6e", color:"#fff", fontWeight:700, fontSize:12, cursor:"pointer" }}>
+                ✔ Fatto
+              </button>
+              <button onClick={()=>{ argsRef.current = {}; setShowArgs("off"); }}
+                style={{ padding:"7px 13px", borderRadius:8, border:"none", background:"#e84040", color:"#fff", fontWeight:700, fontSize:12, cursor:"pointer" }}>
+                ✕ Cancella
+              </button>
+            </div>
+          )}
+          {mode!=="free" && showArgs === "fatto" && (
+            <div style={{ display:"flex", gap:6 }}>
+              <Btn color="#c084fc" onClick={()=>setShowArgs("editing")}>✏️ Modifica</Btn>
+              <button onClick={()=>{ argsRef.current = {}; setShowArgs("off"); }}
+                style={{ padding:"7px 13px", borderRadius:8, border:"none", background:"#e84040", color:"#fff", fontWeight:700, fontSize:12, cursor:"pointer" }}>
+                ✕ Cancella
+              </button>
             </div>
           )}
 
@@ -754,7 +796,7 @@ export default function App() {
       {/* BOARD */}
       <div ref={boardRef} style={{ maxWidth:880, margin:"10px auto 0", padding:"0 8px 16px" }}>
         <div style={{ textAlign:"right", fontSize:9, color:D.subText, opacity:.4, marginBottom:3, paddingRight:4 }}>universosportivo.com</div>
-        <div style={{ borderRadius:14, overflow:"hidden", border:`1px solid ${D.border}`, boxShadow:dark?"0 8px 40px rgba(0,0,0,0.4)":"0 4px 20px rgba(0,0,0,0.08)" }}>
+        <div ref={tiersRef} style={{ borderRadius:14, overflow:"hidden", border:`1px solid ${D.border}`, boxShadow:dark?"0 8px 40px rgba(0,0,0,0.4)":"0 4px 20px rgba(0,0,0,0.08)" }}>
           {mode==="free"
             ? freeTiers.map(tier=><FreeRow key={tier.id} tier={tier} />)
             : TIERS.map(tier=><TierRow key={tier.id} tier={tier} />)
