@@ -132,6 +132,29 @@ function FreeCard({ item, onRemove, isSel, onClick, accent }) {
   );
 }
 
+// Textarea motivazione — uncontrolled: legge/scrive su ref, nessun re-render globale
+function ArgBox({ teamId, argsRef, D }) {
+  const localRef = useRef(null);
+  useEffect(() => {
+    if (localRef.current) localRef.current.value = argsRef.current[teamId] || "";
+  }, [teamId]);
+  return (
+    <textarea
+      ref={localRef}
+      defaultValue={argsRef.current[teamId] || ""}
+      onBlur={e => { argsRef.current[teamId] = e.target.value; }}
+      onClick={e => e.stopPropagation()}
+      onDragStart={e => e.stopPropagation()}
+      onKeyDown={e => e.stopPropagation()}
+      placeholder="Motivazione…"
+      rows={2}
+      style={{ width:80, fontSize:9, padding:"3px 5px", borderRadius:6,
+        border:`1px solid ${D.argBorder}`, background:D.argBg, color:D.text,
+        resize:"none", outline:"none", lineHeight:1.3, fontFamily:"inherit" }}
+    />
+  );
+}
+
 // ═══════════════════════════════════════════════════
 // MAIN APP
 // ═══════════════════════════════════════════════════
@@ -140,29 +163,49 @@ export default function App() {
   const [mode, setMode]   = useState("tier");
   const [dark, setDark]   = useState(true);
   const [showArgs, setShowArgs] = useState(false); // switch argomentazioni
-  const [args, setArgs]   = useState({}); // { teamId: "testo argomento" }
-  const boardRef          = useRef(null);
+  const argsRef = useRef({}); // { teamId: "testo" } — ref, non state, per evitare re-render
+  const boardRef = useRef(null);
 
   const [pl, setPl]       = useState(() => { const s=loadLS(); return s?.pl || { tier:empty(TIER_TIERS), market:empty(MARKET_TIERS) }; });
   const [pools, setPools] = useState(() => { const s=loadLS(); return s?.pools || { tier:TEAMS.map(t=>t.id), market:TEAMS.map(t=>t.id) }; });
   const [selected, setSel]= useState(null);
 
-  // Undo history
-  const historyRef = useRef([]);
-  function pushHistory(pl, pools) {
-    historyRef.current = [...historyRef.current.slice(-19), { pl: JSON.parse(JSON.stringify(pl)), pools: JSON.parse(JSON.stringify(pools)) }];
-  }
-  function undo() {
-    if (!historyRef.current.length) return;
-    const prev = historyRef.current[historyRef.current.length - 1];
-    historyRef.current = historyRef.current.slice(0, -1);
-    setPl(prev.pl); setPools(prev.pools); setSel(null);
-    showToast("↩ Azione annullata");
+  // Undo / Redo
+  const undoStack = useRef([]);
+  const redoStack = useRef([]);
+
+  function pushHistory(curPl, curPools) {
+    undoStack.current = [...undoStack.current.slice(-29), { pl: JSON.parse(JSON.stringify(curPl)), pools: JSON.parse(JSON.stringify(curPools)) }];
+    redoStack.current = []; // nuova azione azzera redo
   }
 
-  // Ctrl+Z
+  function undo() {
+    if (!undoStack.current.length) return;
+    const prev = undoStack.current[undoStack.current.length - 1];
+    undoStack.current = undoStack.current.slice(0, -1);
+    // salva stato corrente in redo prima di applicare
+    setPl(cur => { redoStack.current = [...redoStack.current, { pl: JSON.parse(JSON.stringify(cur)), pools: JSON.parse(JSON.stringify(pools)) }]; return prev.pl; });
+    setPools(prev.pools); setSel(null);
+    showToast("↩ Annullato");
+  }
+
+  function redo() {
+    if (!redoStack.current.length) return;
+    const next = redoStack.current[redoStack.current.length - 1];
+    redoStack.current = redoStack.current.slice(0, -1);
+    setPl(cur => { undoStack.current = [...undoStack.current, { pl: JSON.parse(JSON.stringify(cur)), pools: JSON.parse(JSON.stringify(pools)) }]; return next.pl; });
+    setPools(next.pools); setSel(null);
+    showToast("↪ Ripristinato");
+  }
+
+  // Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y
   useEffect(() => {
-    const handler = e => { if ((e.ctrlKey || e.metaKey) && e.key === "z") { e.preventDefault(); undo(); } };
+    const handler = e => {
+      if (e.target.tagName === "TEXTAREA" || e.target.tagName === "INPUT") return;
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "z") { e.preventDefault(); redo(); return; }
+      if ((e.ctrlKey || e.metaKey) && e.key === "y") { e.preventDefault(); redo(); return; }
+      if ((e.ctrlKey || e.metaKey) && e.key === "z") { e.preventDefault(); undo(); }
+    };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, []);
@@ -411,7 +454,6 @@ export default function App() {
     const t = getTeam(teamId); if (!t) return null;
     const isSel  = selected === teamId;
     const isNew  = newEntries.has(teamId);
-    const argVal = args[teamId] || "";
 
     function handleDragStart(e) {
       dragRef.current = { id: teamId, fromTier: inTier ? tierId : null, fromIdx: tierIdx };
@@ -449,18 +491,9 @@ export default function App() {
             )}
           </div>
         </Tooltip>
-        {/* Argomentazione */}
+        {/* Argomentazione — uncontrolled per evitare re-render ad ogni tasto */}
         {showArgs && inTier && (
-          <textarea
-            value={argVal}
-            onChange={e=>setArgs(prev=>({...prev,[teamId]:e.target.value}))}
-            onClick={e=>e.stopPropagation()}
-            onDragStart={e=>e.stopPropagation()}
-            placeholder="Motivazione…"
-            rows={2}
-            style={{ width:80, fontSize:9, padding:"3px 5px", borderRadius:6, border:`1px solid ${D.argBorder}`,
-              background:D.argBg, color:D.text, resize:"none", outline:"none", lineHeight:1.3, fontFamily:"inherit" }}
-          />
+          <ArgBox teamId={teamId} argsRef={argsRef} D={D} />
         )}
       </div>
     );
@@ -697,7 +730,8 @@ export default function App() {
           )}
 
           {mode!=="free"&&<Btn color="#f5c842" onClick={randomize}>🎲 Riempi</Btn>}
-          {mode!=="free"&&<Btn color="#888" textColor={dark?"#ccc":"#444"} onClick={undo} title="Annulla ultima azione (Ctrl+Z)">↩ Undo</Btn>}
+          {mode!=="free"&&<Btn color="#888" textColor={dark?"#ccc":"#444"} onClick={undo} title="Annulla (Ctrl+Z)">↩</Btn>}
+          {mode!=="free"&&<Btn color="#888" textColor={dark?"#ccc":"#444"} onClick={redo} title="Ripristina (Ctrl+Shift+Z)">↪</Btn>}
           {mode==="free"&&<Btn color="#3dbb6e" onClick={addFreeTier}>+ Fascia</Btn>}
           {mode==="free"&&<Btn color="#a78bfa" onClick={()=>setShowImport(true)}>⬆ Importa lista</Btn>}
           <Btn color={dark?"#bbb":"#555"} textColor={dark?"#ccc":"#444"} onClick={mode==="free"?resetFree:resetTM}>↺ Svuota</Btn>
