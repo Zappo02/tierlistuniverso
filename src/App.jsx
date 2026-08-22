@@ -166,13 +166,14 @@ function ArgBox({ teamId, argsRef, D, tierColor, argsMode }) {
         onKeyDown={e => e.stopPropagation()}
         placeholder="Motivazione…"
         rows={1}
-        style={{ width:60, fontSize:9, padding:"4px 4px", borderRadius:6,
+        style={{ width:"100%", fontSize:9, padding:"3px 4px", borderRadius:"0 0 8px 8px",
           border:`1px solid ${tierColor}66`,
           background:`${tierColor}22`,
           color: tierColor,
           resize:"none", outline:"none", lineHeight:1.4, fontFamily:"'Inter','Segoe UI',sans-serif",
-          textAlign:"center", overflow:"hidden", display:"block", minHeight:24,
-          fontWeight:600, wordBreak:"break-word", whiteSpace:"pre-wrap" }}
+          textAlign:"center", overflow:"hidden", display:"block", minHeight:22,
+          fontWeight:600, wordBreak:"break-word", whiteSpace:"pre-wrap",
+          borderTop:"none", marginTop:0 }}
       />
     </div>
   );
@@ -488,6 +489,8 @@ export default function App() {
     const t = getTeam(teamId); if (!t) return null;
     const isSel  = selected === teamId;
     const isNew  = newEntries.has(teamId);
+    const withArgs = (showArgs === "editing" || showArgs === "fatto") && inTier;
+    const LOGO = 48; // logo più piccolo per compattezza
 
     function handleDragStart(e) {
       dragRef.current = { id: teamId, fromTier: inTier ? tierId : null, fromIdx: tierIdx };
@@ -496,40 +499,43 @@ export default function App() {
     }
 
     return (
-      <div style={{ display:"flex", flexDirection:(showArgs!=="off")?"row":"column", alignItems:"center", gap:4, flexShrink:0 }}>
-        <Tooltip text={t.name}>
-          <div
-            draggable
-            onDragStart={handleDragStart}
-            onDragEnd={()=>{ dragRef.current = { id:null, fromTier:null, fromIdx:null }; }}
-            onClick={e=>{ e.stopPropagation(); if(isSel){setSel(null);}else{setSel(teamId);} }}
-            style={{ width:60, height:60, flexShrink:0, borderRadius:10, overflow:"hidden",
-              position:"relative", cursor:"grab", userSelect:"none",
-              border:isSel?`3px solid ${D.accent}`:`2px solid rgba(255,255,255,0.1)`,
-              boxShadow:isSel?`0 0 16px ${D.accent}88`:"0 2px 6px rgba(0,0,0,0.25)",
-              transition:"border .15s, box-shadow .15s, transform .3s",
-              transform: isNew ? "scale(1.15)" : "scale(1)",
-              display:"flex", alignItems:"center", justifyContent:"center",
-            }}>
-            <TeamLogo team={t} size={60} />
-            {/* × sempre visibile */}
+      <Tooltip text={t.name}>
+        <div
+          draggable
+          onDragStart={handleDragStart}
+          onDragEnd={()=>{ dragRef.current = { id:null, fromTier:null, fromIdx:null }; }}
+          onClick={e=>{ e.stopPropagation(); if(isSel){setSel(null);}else{setSel(teamId);} }}
+          style={{
+            width: withArgs ? 70 : LOGO+4,
+            flexShrink:0, borderRadius:10, overflow:"hidden",
+            position:"relative", cursor:"grab", userSelect:"none",
+            border:isSel?`2px solid ${D.accent}`:`2px solid rgba(255,255,255,0.1)`,
+            boxShadow:isSel?`0 0 12px ${D.accent}88`:"0 2px 6px rgba(0,0,0,0.25)",
+            transition:"border .15s, box-shadow .15s, transform .3s",
+            transform: isNew ? "scale(1.12)" : "scale(1)",
+            display:"flex", flexDirection:"column", alignItems:"center",
+            background: withArgs ? `${tierColor||D.accent}12` : "transparent",
+          }}
+        >
+          {/* Logo */}
+          <div style={{ width:"100%", display:"flex", alignItems:"center", justifyContent:"center", padding: withArgs?"6px 0 2px":"0", position:"relative" }}>
+            <TeamLogo team={t} size={LOGO} />
             {inTier && (
               <button onClick={e=>{e.stopPropagation();toPool(teamId);}}
-                style={{ position:"absolute",top:2,right:2,width:16,height:16,borderRadius:"50%",background:"#e84040",border:"2px solid rgba(0,0,0,0.3)",color:"#fff",fontSize:10,fontWeight:900,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",padding:0,lineHeight:1 }}>×</button>
+                style={{ position:"absolute",top:1,right:1,width:14,height:14,borderRadius:"50%",background:"#e84040",border:"1px solid rgba(0,0,0,0.3)",color:"#fff",fontSize:9,fontWeight:900,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",padding:0,lineHeight:1 }}>×</button>
             )}
-            {/* Badge numero */}
-            {inTier && (
-              <div style={{ position:"absolute",bottom:2,left:2,background:"rgba(0,0,0,0.65)",borderRadius:4,fontSize:8,fontWeight:700,color:"#fff",padding:"1px 4px",lineHeight:1.4 }}>
+            {inTier && !withArgs && (
+              <div style={{ position:"absolute",bottom:1,left:1,background:"rgba(0,0,0,0.65)",borderRadius:3,fontSize:7,fontWeight:700,color:"#fff",padding:"1px 3px",lineHeight:1.4 }}>
                 {getGlobalBadge(tierId, tierIdx)}
               </div>
             )}
           </div>
-        </Tooltip>
-        {/* Argomentazione */}
-        {(showArgs === "editing" || showArgs === "fatto") && inTier && (
-          <ArgBox teamId={teamId} argsRef={argsRef} D={D} tierColor={tierColor || D.accent} argsMode={showArgs} />
-        )}
-      </div>
+          {/* Motivazione integrata nella card */}
+          {withArgs && (
+            <ArgBox teamId={teamId} argsRef={argsRef} D={D} tierColor={tierColor || D.accent} argsMode={showArgs} />
+          )}
+        </div>
+      </Tooltip>
     );
   }
 
@@ -570,20 +576,20 @@ export default function App() {
     }
 
     return (
-      <div style={{ display:"flex", borderBottom:`1px solid ${D.border}`, minHeight:84 }}>
+      <div style={{ display:"flex", borderBottom:`1px solid ${D.border}`, minHeight:72 }}>
         {/* Label */}
         <div
-          style={{ width:115, minWidth:115,
+          style={{ width:90, minWidth:90,
             background:dark?`linear-gradient(90deg,${tier.color}28,${tier.color}08)`:`linear-gradient(90deg,${tier.color}35,${tier.color}10)`,
             borderRight:`4px solid ${tier.color}`,
             display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center",
-            padding:"6px 4px", cursor:selected?"pointer":"default",
+            padding:"4px 3px", cursor:selected?"pointer":"default",
           }}
           onClick={()=>{ if(selected) moveTo(selected, tier.id); }}
         >
-          <div style={{ fontSize:11, fontWeight:900, color:tier.color, textAlign:"center", lineHeight:1.2, letterSpacing:0.3, textShadow:dark?`0 0 14px ${tier.color}55`:"none" }}>{tier.label}</div>
-          <div style={{ fontSize:8, color:D.subText, marginTop:3, textAlign:"center", lineHeight:1.3 }}>{tier.desc}</div>
-          <div style={{ fontSize:9, color:D.subText, marginTop:2 }}>{tierTeams.length > 0 ? `${tierTeams.length} squad.` : ""}</div>
+          <div style={{ fontSize:10, fontWeight:900, color:tier.color, textAlign:"center", lineHeight:1.15, letterSpacing:0.2, textShadow:dark?`0 0 14px ${tier.color}55`:"none" }}>{tier.label}</div>
+          <div style={{ fontSize:7, color:D.subText, marginTop:2, textAlign:"center", lineHeight:1.2 }}>{tier.desc}</div>
+          <div style={{ fontSize:7, color:D.subText, marginTop:1 }}>{tierTeams.length > 0 ? `${tierTeams.length}` : ""}</div>
           {selected && <div style={{ fontSize:8, color:tier.color, marginTop:3, opacity:.9 }}>↓ inserisci</div>}
           {/* Svuota fascia */}
           {tierTeams.length > 0 && (
@@ -597,7 +603,7 @@ export default function App() {
         {/* Drop area */}
         <div
           style={{ flex:1, display:"flex", flexWrap:"wrap", alignItems:"center", padding:"10px 8px", gap:8,
-            background:isOver?(dark?`${tier.color}20`:`${tier.color}18`):D.rowBg, transition:"background .15s" }}
+            background:isOver?(dark?`${tier.color}20`:`${tier.color}18`):D.rowBg, transition:"background .15s", gap:6, padding:"6px 6px" }}
           onDragOver={handleDragOver}
           onDragLeave={e=>{ if(!e.currentTarget.contains(e.relatedTarget)){setIsOver(false);setOverIdx(null);} }}
           onDrop={handleDrop}
@@ -727,7 +733,7 @@ export default function App() {
         <div style={{ fontSize:9, letterSpacing:6, color:D.accent, textTransform:"uppercase", marginBottom:4, opacity:.8 }}>Universosportivo.com</div>
         <h1 style={{ margin:0, fontSize:"clamp(18px,3.5vw,30px)", fontWeight:900, letterSpacing:-1, color:D.text }}>
           {mode==="tier"?"Tier List":mode==="market"?"Voti Mercato":"Tier List Libera"}
-          {mode!=="free"&&<>{" "}<span style={{ color:D.accent }}>Serie A</span>{" "}<span style={{ color:D.subText, fontSize:"0.6em", fontWeight:600 }}>2025/26</span></>}
+          {mode!=="free"&&<>{" "}<span style={{ color:D.accent }}>Serie A</span></>}
         </h1>
         <div style={{ fontSize:11, color:D.subText, marginTop:3 }}>
           {placed} / {total} elementi posizionati
@@ -869,7 +875,7 @@ export default function App() {
             ) : (
               pool.length===0
                 ? <div style={{ color:D.subText, fontSize:12, alignSelf:"center" }}>Tutte le squadre posizionate ✔</div>
-                : pool.map(tid=><Card key={tid} teamId={tid} inTier={false} />)
+                : pool.map(tid=><Card key={tid} teamId={tid} inTier={false} tierColor={D.accent} />)
             )}
           </div>
         </div>
