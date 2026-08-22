@@ -185,6 +185,82 @@ const Card = React.memo(({ teamId, inTier, tierId, tierIdx, tierColor,
   );
 });
 
+const TierRow = React.memo(function TierRow({ tier, tierTeams, D, dark, selectedRef,
+  moveTo, reorderInTier, dragRef, showArgs, argsRef, getTeam, handleSelect,
+  getGlobalBadge, toPool }) {
+  const [isOver, setIsOver] = useState(false);
+  const [overIdx, setOverIdx] = useState(null);
+
+  function getDropIdx(e, container) {
+    const cards = container.querySelectorAll("[data-cardidx]");
+    for (let i = 0; i < cards.length; i++) {
+      const r = cards[i].getBoundingClientRect();
+      if (e.clientX < r.left + r.width / 2) return i;
+    }
+    return cards.length;
+  }
+
+  function handleDragOver(e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setIsOver(true);
+    setOverIdx(getDropIdx(e, e.currentTarget));
+  }
+
+  function handleDrop(e) {
+    e.preventDefault();
+    const { id, fromTier, fromIdx } = dragRef.current;
+    if (!id) return;
+    const dropIdx = getDropIdx(e, e.currentTarget);
+    if (fromTier === tier.id) {
+      reorderInTier(tier.id, fromIdx, dropIdx > fromIdx ? dropIdx - 1 : dropIdx);
+    } else {
+      moveTo(id, tier.id);
+    }
+    dragRef.current = { id:null, fromTier:null, fromIdx:null };
+    setIsOver(false); setOverIdx(null);
+  }
+
+  return (
+    <div style={{ display:"flex", borderBottom:`1px solid ${D.border}`, minHeight:72 }}>
+      <div
+        style={{ width:96, minWidth:96,
+          background:dark?`linear-gradient(90deg,${tier.color}28,${tier.color}08)`:`linear-gradient(90deg,${tier.color}35,${tier.color}10)`,
+          borderRight:`4px solid ${tier.color}`,
+          display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center",
+          padding:"4px 3px", cursor:selectedRef.current?"pointer":"default",
+        }}
+        onClick={()=>{ if(selectedRef.current) moveTo(selectedRef.current, tier.id); }}
+      >
+        <div style={{ fontSize:9, fontWeight:900, color:tier.color, textAlign:"center", lineHeight:1.15, letterSpacing:0, textShadow:dark?`0 0 14px ${tier.color}55`:"none", wordBreak:"break-word", width:"100%" }}>{tier.label}</div>
+        <div style={{ fontSize:7, color:D.subText, marginTop:2, textAlign:"center", lineHeight:1.2 }}>{tier.desc}</div>
+      </div>
+      <div
+        style={{ flex:1, display:"flex", flexWrap:"wrap", alignItems:"center",
+          background:isOver?(dark?`${tier.color}20`:`${tier.color}18`):D.rowBg,
+          transition:"background .15s", gap:6, padding:"6px 6px" }}
+        onDragOver={handleDragOver}
+        onDragLeave={e=>{ if(!e.currentTarget.contains(e.relatedTarget)){setIsOver(false);setOverIdx(null);} }}
+        onDrop={handleDrop}
+        onClick={()=>{ if(selectedRef.current) moveTo(selectedRef.current, tier.id); }}
+      >
+        {tierTeams.map((tid, idx) => (
+          <div key={tid} data-cardidx={idx} style={{ display:"flex", alignItems:"center" }}>
+            {isOver && overIdx===idx && <div style={{ width:3, height:52, background:tier.color, borderRadius:2, marginRight:4 }} />}
+            <Card teamId={tid} inTier tierId={tier.id} tierIdx={idx} tierColor={tier.color}
+              team={getTeam(tid)} isSel={selectedRef.current===tid} onSelect={handleSelect}
+              dragRef={dragRef} showArgs={showArgs} argsRef={argsRef} D={D}
+              getGlobalBadge={getGlobalBadge} toPool={toPool} />
+          </div>
+        ))}
+        {isOver && overIdx===tierTeams.length && tierTeams.length>0 && (
+          <div style={{ width:3, height:52, background:tier.color, borderRadius:2 }} />
+        )}
+      </div>
+    </div>
+  );
+});
+
 // ArgBox — uncontrolled, auto-resize, colore fascia, solo se ha testo in modalità "fatto"
 function ArgBox({ teamId, argsRef, D, tierColor, argsMode }) {
   const localRef = useRef(null);
@@ -247,8 +323,15 @@ export default function App() {
 
   const [pl, setPl]       = useState(() => { const s=loadLS(); return s?.pl || { tier:empty(TIER_TIERS), market:empty(MARKET_TIERS) }; });
   const [pools, setPools] = useState(() => { const s=loadLS(); return s?.pools || { tier:TEAMS.map(t=>t.id), market:TEAMS.map(t=>t.id) }; });
-  const [selected, setSel]= useState(null);
-  const handleSelect = useCallback((teamId) => { setSel(prev => prev === teamId ? null : teamId); }, []);
+  const selectedRef = useRef(null); // ref, non state — nessun re-render globale
+  const [, forceUpdate] = useState(0); // usato solo per aggiornare le 2 card coinvolte
+  // selected è letto dal ref
+  const selected = selectedRef.current;
+  const handleSelect = useCallback((teamId) => {
+    selectedRef.current = selectedRef.current === teamId ? null : teamId;
+    forceUpdate(n => n + 1); // trigger minimo re-render
+  }, []);
+  const setSel = useCallback((v) => { selectedRef.current = v; forceUpdate(n => n + 1); }, []);
 
   // Undo / Redo
   const undoStack = useRef([]);
@@ -536,85 +619,6 @@ export default function App() {
     return null;
   }, [placements, TIERS]);
 
-  // ── Tier row ──────────────────────────────────
-  function TierRow({ tier }) {
-    const tierTeams = placements[tier.id] || [];
-    const [isOver, setIsOver] = useState(false);
-    const [overIdx, setOverIdx] = useState(null);
-
-    function getDropIdx(e, container) {
-      const cards = container.querySelectorAll("[data-cardidx]");
-      for (let i = 0; i < cards.length; i++) {
-        const r = cards[i].getBoundingClientRect();
-        if (e.clientX < r.left + r.width / 2) return i;
-      }
-      return cards.length;
-    }
-
-    function handleDragOver(e) {
-      e.preventDefault();
-      e.dataTransfer.dropEffect = "move";
-      setIsOver(true);
-      setOverIdx(getDropIdx(e, e.currentTarget));
-    }
-
-    function handleDrop(e) {
-      e.preventDefault();
-      const { id, fromTier, fromIdx } = dragRef.current;
-      if (!id) return;
-      const dropIdx = getDropIdx(e, e.currentTarget);
-      if (fromTier === tier.id) {
-        reorderInTier(tier.id, fromIdx, dropIdx > fromIdx ? dropIdx - 1 : dropIdx);
-      } else {
-        moveTo(id, tier.id);
-      }
-      dragRef.current = { id:null, fromTier:null, fromIdx:null };
-      setIsOver(false); setOverIdx(null);
-    }
-
-    return (
-      <div style={{ display:"flex", borderBottom:`1px solid ${D.border}`, minHeight:72 }}>
-        {/* Label */}
-        <div
-          style={{ width:96, minWidth:96,
-            background:dark?`linear-gradient(90deg,${tier.color}28,${tier.color}08)`:`linear-gradient(90deg,${tier.color}35,${tier.color}10)`,
-            borderRight:`4px solid ${tier.color}`,
-            display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center",
-            padding:"4px 3px", cursor:selected?"pointer":"default",
-          }}
-          onClick={()=>{ if(selected) moveTo(selected, tier.id); }}
-        >
-          <div style={{ fontSize:9, fontWeight:900, color:tier.color, textAlign:"center", lineHeight:1.15, letterSpacing:0, textShadow:dark?`0 0 14px ${tier.color}55`:"none", wordBreak:"break-word", width:"100%" }}>{tier.label}</div>
-          <div style={{ fontSize:7, color:D.subText, marginTop:2, textAlign:"center", lineHeight:1.2 }}>{tier.desc}</div>
-
-
-
-        </div>
-
-        {/* Drop area */}
-        <div
-          style={{ flex:1, display:"flex", flexWrap:"wrap", alignItems:"center", padding:"10px 8px", gap:8,
-            background:isOver?(dark?`${tier.color}20`:`${tier.color}18`):D.rowBg, transition:"background .15s", gap:6, padding:"6px 6px" }}
-          onDragOver={handleDragOver}
-          onDragLeave={e=>{ if(!e.currentTarget.contains(e.relatedTarget)){setIsOver(false);setOverIdx(null);} }}
-          onDrop={handleDrop}
-          onClick={()=>{ if(selected) moveTo(selected, tier.id); }}
-        >
-          {tierTeams.map((tid, idx) => (
-            <div key={tid} data-cardidx={idx} style={{ display:"flex", alignItems:"center" }}>
-              {isOver && overIdx===idx && <div style={{ width:3, height:52, background:tier.color, borderRadius:2, marginRight:4 }} />}
-              <Card key={tid} teamId={tid} inTier tierId={tier.id} tierIdx={idx} tierColor={tier.color}
-                team={getTeam(tid)} isSel={selected===tid} onSelect={handleSelect} dragRef={dragRef} showArgs={showArgs} argsRef={argsRef} D={D} getGlobalBadge={getGlobalBadge} toPool={toPool} />
-            </div>
-          ))}
-          {isOver && overIdx===tierTeams.length && tierTeams.length>0 && (
-            <div style={{ width:3, height:52, background:tier.color, borderRadius:2 }} />
-          )}
-        </div>
-      </div>
-    );
-  }
-
   // ── Free row ──────────────────────────────────
   function FreeRow({ tier }) {
     const items = freeItems[tier.id] || [];
@@ -800,7 +804,11 @@ export default function App() {
         <div ref={tiersRef} style={{ borderRadius:14, overflow:"hidden", border:`1px solid ${D.border}`, boxShadow:dark?"0 8px 40px rgba(0,0,0,0.4)":"0 4px 20px rgba(0,0,0,0.08)" }}>
           {mode==="free"
             ? freeTiers.map(tier=><FreeRow key={tier.id} tier={tier} />)
-            : TIERS.map(tier=><TierRow key={tier.id} tier={tier} />)
+            : TIERS.map(tier=><TierRow key={tier.id} tier={tier}
+                tierTeams={placements[tier.id]||[]} D={D} dark={dark} selectedRef={selectedRef}
+                moveTo={moveTo} reorderInTier={reorderInTier} dragRef={dragRef}
+                showArgs={showArgs} argsRef={argsRef} getTeam={getTeam}
+                handleSelect={handleSelect} getGlobalBadge={getGlobalBadge} toPool={toPool} />)
           }
         </div>
 
