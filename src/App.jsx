@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import React, { useState, useRef, useCallback, useEffect } from "react";
 import html2canvas from "html2canvas";
 
 // ═══════════════════════════════════════════════════
@@ -133,11 +133,10 @@ function FreeCard({ item, onRemove, isSel, onClick, accent }) {
 }
 
 // ── Card Serie A (fuori da App per evitare re-render/flickering) ──────────────
-const Card = ({ teamId, inTier, tierId, tierIdx, tierColor,
-  getTeam, selected, setSel, dragRef, newEntries, showArgs,
-  argsRef, D, getGlobalBadge, toPool, dark }) => {
-  const t = getTeam(teamId); if (!t) return null;
-  const isSel  = selected === teamId;
+const Card = React.memo(({ teamId, inTier, tierId, tierIdx, tierColor,
+  team, isSel, onSelect, dragRef, showArgs,
+  argsRef, D, getGlobalBadge, toPool }) => {
+  const t = team; if (!t) return null;
   const withArgs = (showArgs === "editing" || showArgs === "fatto") && inTier;
   const LOGO = 44; // logo compatto
 
@@ -153,7 +152,7 @@ const Card = ({ teamId, inTier, tierId, tierIdx, tierColor,
         draggable
         onDragStart={handleDragStart}
         onDragEnd={()=>{ dragRef.current = { id:null, fromTier:null, fromIdx:null }; }}
-        onClick={e=>{ e.stopPropagation(); if(isSel){setSel(null);}else{setSel(teamId);} }}
+        onClick={e=>{ e.stopPropagation(); onSelect(teamId); }}
         style={{
           width: withArgs ? 64 : LOGO+2,
           flexShrink:0, borderRadius:10, overflow:"hidden",
@@ -184,7 +183,7 @@ const Card = ({ teamId, inTier, tierId, tierIdx, tierColor,
       </div>
     </Tooltip>
   );
-};
+});
 
 // ArgBox — uncontrolled, auto-resize, colore fascia, solo se ha testo in modalità "fatto"
 function ArgBox({ teamId, argsRef, D, tierColor, argsMode }) {
@@ -249,6 +248,7 @@ export default function App() {
   const [pl, setPl]       = useState(() => { const s=loadLS(); return s?.pl || { tier:empty(TIER_TIERS), market:empty(MARKET_TIERS) }; });
   const [pools, setPools] = useState(() => { const s=loadLS(); return s?.pools || { tier:TEAMS.map(t=>t.id), market:TEAMS.map(t=>t.id) }; });
   const [selected, setSel]= useState(null);
+  const handleSelect = useCallback((teamId) => { setSel(prev => prev === teamId ? null : teamId); }, []);
 
   // Undo / Redo
   const undoStack = useRef([]);
@@ -586,7 +586,7 @@ export default function App() {
         >
           <div style={{ fontSize:9, fontWeight:900, color:tier.color, textAlign:"center", lineHeight:1.15, letterSpacing:0, textShadow:dark?`0 0 14px ${tier.color}55`:"none", wordBreak:"break-word", width:"100%" }}>{tier.label}</div>
           <div style={{ fontSize:7, color:D.subText, marginTop:2, textAlign:"center", lineHeight:1.2 }}>{tier.desc}</div>
-          <div style={{ fontSize:7, color:D.subText, marginTop:1 }}>{tierTeams.length > 0 ? `${tierTeams.length}` : ""}</div>
+
 
 
         </div>
@@ -603,8 +603,8 @@ export default function App() {
           {tierTeams.map((tid, idx) => (
             <div key={tid} data-cardidx={idx} style={{ display:"flex", alignItems:"center" }}>
               {isOver && overIdx===idx && <div style={{ width:3, height:52, background:tier.color, borderRadius:2, marginRight:4 }} />}
-              <Card teamId={tid} inTier tierId={tier.id} tierIdx={idx} tierColor={tier.color}
-                getTeam={getTeam} selected={selected} setSel={setSel} dragRef={dragRef} newEntries={newEntries} showArgs={showArgs} argsRef={argsRef} D={D} getGlobalBadge={getGlobalBadge} toPool={toPool} dark={dark} />
+              <Card key={tid} teamId={tid} inTier tierId={tier.id} tierIdx={idx} tierColor={tier.color}
+                team={getTeam(tid)} isSel={selected===tid} onSelect={handleSelect} dragRef={dragRef} showArgs={showArgs} argsRef={argsRef} D={D} getGlobalBadge={getGlobalBadge} toPool={toPool} />
             </div>
           ))}
           {isOver && overIdx===tierTeams.length && tierTeams.length>0 && (
@@ -868,7 +868,7 @@ export default function App() {
               pool.length===0
                 ? <div style={{ color:D.subText, fontSize:12, alignSelf:"center" }}>Tutte le squadre posizionate ✔</div>
                 : pool.map(tid=><Card key={tid} teamId={tid} inTier={false} tierColor={D.accent}
-                getTeam={getTeam} selected={selected} setSel={setSel} dragRef={dragRef} newEntries={newEntries} showArgs={showArgs} argsRef={argsRef} D={D} getGlobalBadge={getGlobalBadge} toPool={toPool} dark={dark} />)
+                team={getTeam(tid)} isSel={selected===tid} onSelect={handleSelect} dragRef={dragRef} showArgs={showArgs} argsRef={argsRef} D={D} getGlobalBadge={getGlobalBadge} toPool={toPool} />)
             )}
           </div>
         </div>
