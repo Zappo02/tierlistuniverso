@@ -146,8 +146,7 @@ function ArgBox({ teamId, argsRef, D, tierColor, argsMode }) {
   }, [teamId]);
 
   function autoResize(el) {
-    el.style.height = "auto";
-    el.style.height = el.scrollHeight + "px";
+    // altezza fissa 34px — no auto-resize
   }
 
   // In modalità "fatto": mostra solo se c'è testo, oppure se stai editando
@@ -170,9 +169,9 @@ function ArgBox({ teamId, argsRef, D, tierColor, argsMode }) {
           border:`1px solid ${tierColor}66`,
           background:`${tierColor}22`,
           color: tierColor,
-          resize:"none", outline:"none", lineHeight:1.4, fontFamily:"'Inter','Segoe UI',sans-serif",
-          textAlign:"center", overflow:"hidden", display:"block", minHeight:22,
-          fontWeight:600, wordBreak:"break-word", whiteSpace:"pre-wrap",
+          resize:"none", outline:"none", lineHeight:1.3, fontFamily:"'Inter','Segoe UI',sans-serif",
+          textAlign:"center", overflowY:"auto", display:"block", height:34,
+          fontWeight:600, wordBreak:"break-word",
           borderTop:"none", marginTop:0 }}
       />
     </div>
@@ -323,7 +322,11 @@ export default function App() {
       saveLS({ pl:newPl, pools });
       return newPl;
     });
-    setPools(prev => ({ ...prev, [mode]: [...prev[mode], teamId] }));
+    // deduplicazione: aggiungi solo se non già presente
+    setPools(prev => {
+      if (prev[mode].includes(teamId)) return prev;
+      return { ...prev, [mode]: [...prev[mode], teamId] };
+    });
     setSel(null);
   }
 
@@ -490,7 +493,7 @@ export default function App() {
     const isSel  = selected === teamId;
     const isNew  = newEntries.has(teamId);
     const withArgs = (showArgs === "editing" || showArgs === "fatto") && inTier;
-    const LOGO = 48; // logo più piccolo per compattezza
+    const LOGO = 44; // logo compatto
 
     function handleDragStart(e) {
       dragRef.current = { id: teamId, fromTier: inTier ? tierId : null, fromIdx: tierIdx };
@@ -506,7 +509,7 @@ export default function App() {
           onDragEnd={()=>{ dragRef.current = { id:null, fromTier:null, fromIdx:null }; }}
           onClick={e=>{ e.stopPropagation(); if(isSel){setSel(null);}else{setSel(teamId);} }}
           style={{
-            width: withArgs ? 70 : LOGO+4,
+            width: withArgs ? 64 : LOGO+2,
             flexShrink:0, borderRadius:10, overflow:"hidden",
             position:"relative", cursor:"grab", userSelect:"none",
             border:isSel?`2px solid ${D.accent}`:`2px solid rgba(255,255,255,0.1)`,
@@ -579,7 +582,7 @@ export default function App() {
       <div style={{ display:"flex", borderBottom:`1px solid ${D.border}`, minHeight:72 }}>
         {/* Label */}
         <div
-          style={{ width:90, minWidth:90,
+          style={{ width:96, minWidth:96,
             background:dark?`linear-gradient(90deg,${tier.color}28,${tier.color}08)`:`linear-gradient(90deg,${tier.color}35,${tier.color}10)`,
             borderRight:`4px solid ${tier.color}`,
             display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center",
@@ -587,17 +590,11 @@ export default function App() {
           }}
           onClick={()=>{ if(selected) moveTo(selected, tier.id); }}
         >
-          <div style={{ fontSize:10, fontWeight:900, color:tier.color, textAlign:"center", lineHeight:1.15, letterSpacing:0.2, textShadow:dark?`0 0 14px ${tier.color}55`:"none" }}>{tier.label}</div>
+          <div style={{ fontSize:9, fontWeight:900, color:tier.color, textAlign:"center", lineHeight:1.15, letterSpacing:0, textShadow:dark?`0 0 14px ${tier.color}55`:"none", wordBreak:"break-word", width:"100%" }}>{tier.label}</div>
           <div style={{ fontSize:7, color:D.subText, marginTop:2, textAlign:"center", lineHeight:1.2 }}>{tier.desc}</div>
           <div style={{ fontSize:7, color:D.subText, marginTop:1 }}>{tierTeams.length > 0 ? `${tierTeams.length}` : ""}</div>
           {selected && <div style={{ fontSize:8, color:tier.color, marginTop:3, opacity:.9 }}>↓ inserisci</div>}
-          {/* Svuota fascia */}
-          {tierTeams.length > 0 && (
-            <button onClick={e=>{e.stopPropagation();clearTier(tier.id);}} title="Svuota fascia"
-              style={{ marginTop:4, background:"none", border:"none", color:"rgba(255,255,255,0.25)", fontSize:10, cursor:"pointer", padding:0 }}>
-              ✕ svuota
-            </button>
-          )}
+
         </div>
 
         {/* Drop area */}
@@ -825,7 +822,7 @@ export default function App() {
               freeDragRef.current=null;
             } else {
               const { id } = dragRef.current;
-              if(id){ toPool(id); dragRef.current={id:null,fromTier:null,fromIdx:null}; }
+              if(id && !pool.includes(id)){ toPool(id); dragRef.current={id:null,fromTier:null,fromIdx:null}; }
             }
           }}>
 
