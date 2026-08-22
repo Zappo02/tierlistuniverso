@@ -132,6 +132,61 @@ function FreeCard({ item, onRemove, isSel, onClick, accent }) {
   );
 }
 
+// ── Card Serie A (fuori da App per evitare re-render/flickering) ──────────────
+const Card = ({ teamId, inTier, tierId, tierIdx, tierColor,
+  getTeam, selected, setSel, dragRef, newEntries, showArgs,
+  argsRef, D, getGlobalBadge, toPool, dark }) => {
+  const t = getTeam(teamId); if (!t) return null;
+  const isSel  = selected === teamId;
+  const isNew  = newEntries.has(teamId);
+  const withArgs = (showArgs === "editing" || showArgs === "fatto") && inTier;
+  const LOGO = 44; // logo compatto
+
+  function handleDragStart(e) {
+    dragRef.current = { id: teamId, fromTier: inTier ? tierId : null, fromIdx: tierIdx };
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", teamId);
+  }
+
+  return (
+    <Tooltip text={t.name}>
+      <div
+        draggable
+        onDragStart={handleDragStart}
+        onDragEnd={()=>{ dragRef.current = { id:null, fromTier:null, fromIdx:null }; }}
+        onClick={e=>{ e.stopPropagation(); if(isSel){setSel(null);}else{setSel(teamId);} }}
+        style={{
+          width: withArgs ? 64 : LOGO+2,
+          flexShrink:0, borderRadius:10, overflow:"hidden",
+          position:"relative", cursor:"grab", userSelect:"none",
+          border:isSel?`2px solid ${D.accent}`:`2px solid rgba(255,255,255,0.1)`,
+          boxShadow:isSel?`0 0 12px ${D.accent}88`:"0 2px 6px rgba(0,0,0,0.25)",
+          transition:"border .15s, box-shadow .15s",
+          transform: isNew ? "scale(1.12)" : "scale(1)",
+          display:"flex", flexDirection:"column", alignItems:"center",
+          background: withArgs ? `${tierColor||D.accent}12` : "transparent",
+        }}
+      >
+        <div style={{ width:"100%", display:"flex", alignItems:"center", justifyContent:"center", padding: withArgs?"6px 0 2px":"0", position:"relative" }}>
+          <TeamLogo team={t} size={LOGO} />
+          {inTier && (
+            <button onClick={e=>{e.stopPropagation();toPool(teamId);}}
+              style={{ position:"absolute",top:1,right:1,width:14,height:14,borderRadius:"50%",background:"#e84040",border:"1px solid rgba(0,0,0,0.3)",color:"#fff",fontSize:9,fontWeight:900,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",padding:0,lineHeight:1 }}>×</button>
+          )}
+          {inTier && !withArgs && (
+            <div style={{ position:"absolute",bottom:1,left:1,background:"rgba(0,0,0,0.65)",borderRadius:3,fontSize:7,fontWeight:700,color:"#fff",padding:"1px 3px",lineHeight:1.4 }}>
+              {getGlobalBadge(tierId, tierIdx)}
+            </div>
+          )}
+        </div>
+        {withArgs && (
+          <ArgBox teamId={teamId} argsRef={argsRef} D={D} tierColor={tierColor || D.accent} argsMode={showArgs} />
+        )}
+      </div>
+    </Tooltip>
+  );
+};
+
 // ArgBox — uncontrolled, auto-resize, colore fascia, solo se ha testo in modalità "fatto"
 function ArgBox({ teamId, argsRef, D, tierColor, argsMode }) {
   const localRef = useRef(null);
@@ -146,7 +201,9 @@ function ArgBox({ teamId, argsRef, D, tierColor, argsMode }) {
   }, [teamId]);
 
   function autoResize(el) {
-    // altezza fissa 34px — no auto-resize
+    el.style.height = "auto";
+    const maxH = Math.round(parseFloat(getComputedStyle(el).lineHeight) * 2 + 6);
+    el.style.height = Math.min(el.scrollHeight, maxH || 44) + "px";
   }
 
   // In modalità "fatto": mostra solo se c'è testo, oppure se stai editando
@@ -169,8 +226,8 @@ function ArgBox({ teamId, argsRef, D, tierColor, argsMode }) {
           border:`1px solid ${tierColor}66`,
           background:`${tierColor}22`,
           color: tierColor,
-          resize:"none", outline:"none", lineHeight:1.3, fontFamily:"'Inter','Segoe UI',sans-serif",
-          textAlign:"center", overflowY:"auto", display:"block", height:34,
+          resize:"none", outline:"none", lineHeight:1.4, fontFamily:"'Inter','Segoe UI',sans-serif",
+          textAlign:"center", overflowY:"hidden", display:"block",
           fontWeight:600, wordBreak:"break-word",
           borderTop:"none", marginTop:0 }}
       />
@@ -487,61 +544,6 @@ export default function App() {
     return null;
   }
 
-  // ── Card Serie A ──────────────────────────────
-  function Card({ teamId, inTier, tierId, tierIdx, tierColor }) {
-    const t = getTeam(teamId); if (!t) return null;
-    const isSel  = selected === teamId;
-    const isNew  = newEntries.has(teamId);
-    const withArgs = (showArgs === "editing" || showArgs === "fatto") && inTier;
-    const LOGO = 44; // logo compatto
-
-    function handleDragStart(e) {
-      dragRef.current = { id: teamId, fromTier: inTier ? tierId : null, fromIdx: tierIdx };
-      e.dataTransfer.effectAllowed = "move";
-      e.dataTransfer.setData("text/plain", teamId);
-    }
-
-    return (
-      <Tooltip text={t.name}>
-        <div
-          draggable
-          onDragStart={handleDragStart}
-          onDragEnd={()=>{ dragRef.current = { id:null, fromTier:null, fromIdx:null }; }}
-          onClick={e=>{ e.stopPropagation(); if(isSel){setSel(null);}else{setSel(teamId);} }}
-          style={{
-            width: withArgs ? 64 : LOGO+2,
-            flexShrink:0, borderRadius:10, overflow:"hidden",
-            position:"relative", cursor:"grab", userSelect:"none",
-            border:isSel?`2px solid ${D.accent}`:`2px solid rgba(255,255,255,0.1)`,
-            boxShadow:isSel?`0 0 12px ${D.accent}88`:"0 2px 6px rgba(0,0,0,0.25)",
-            transition:"border .15s, box-shadow .15s, transform .3s",
-            transform: isNew ? "scale(1.12)" : "scale(1)",
-            display:"flex", flexDirection:"column", alignItems:"center",
-            background: withArgs ? `${tierColor||D.accent}12` : "transparent",
-          }}
-        >
-          {/* Logo */}
-          <div style={{ width:"100%", display:"flex", alignItems:"center", justifyContent:"center", padding: withArgs?"6px 0 2px":"0", position:"relative" }}>
-            <TeamLogo team={t} size={LOGO} />
-            {inTier && (
-              <button onClick={e=>{e.stopPropagation();toPool(teamId);}}
-                style={{ position:"absolute",top:1,right:1,width:14,height:14,borderRadius:"50%",background:"#e84040",border:"1px solid rgba(0,0,0,0.3)",color:"#fff",fontSize:9,fontWeight:900,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",padding:0,lineHeight:1 }}>×</button>
-            )}
-            {inTier && !withArgs && (
-              <div style={{ position:"absolute",bottom:1,left:1,background:"rgba(0,0,0,0.65)",borderRadius:3,fontSize:7,fontWeight:700,color:"#fff",padding:"1px 3px",lineHeight:1.4 }}>
-                {getGlobalBadge(tierId, tierIdx)}
-              </div>
-            )}
-          </div>
-          {/* Motivazione integrata nella card */}
-          {withArgs && (
-            <ArgBox teamId={teamId} argsRef={argsRef} D={D} tierColor={tierColor || D.accent} argsMode={showArgs} />
-          )}
-        </div>
-      </Tooltip>
-    );
-  }
-
   // ── Tier row ──────────────────────────────────
   function TierRow({ tier }) {
     const tierTeams = placements[tier.id] || [];
@@ -609,7 +611,8 @@ export default function App() {
           {tierTeams.map((tid, idx) => (
             <div key={tid} data-cardidx={idx} style={{ display:"flex", alignItems:"center" }}>
               {isOver && overIdx===idx && <div style={{ width:3, height:52, background:tier.color, borderRadius:2, marginRight:4 }} />}
-              <Card teamId={tid} inTier tierId={tier.id} tierIdx={idx} tierColor={tier.color} />
+              <Card teamId={tid} inTier tierId={tier.id} tierIdx={idx} tierColor={tier.color}
+                getTeam={getTeam} selected={selected} setSel={setSel} dragRef={dragRef} newEntries={newEntries} showArgs={showArgs} argsRef={argsRef} D={D} getGlobalBadge={getGlobalBadge} toPool={toPool} dark={dark} />
             </div>
           ))}
           {isOver && overIdx===tierTeams.length && tierTeams.length>0 && (
@@ -872,7 +875,8 @@ export default function App() {
             ) : (
               pool.length===0
                 ? <div style={{ color:D.subText, fontSize:12, alignSelf:"center" }}>Tutte le squadre posizionate ✔</div>
-                : pool.map(tid=><Card key={tid} teamId={tid} inTier={false} tierColor={D.accent} />)
+                : pool.map(tid=><Card key={tid} teamId={tid} inTier={false} tierColor={D.accent}
+                getTeam={getTeam} selected={selected} setSel={setSel} dragRef={dragRef} newEntries={newEntries} showArgs={showArgs} argsRef={argsRef} D={D} getGlobalBadge={getGlobalBadge} toPool={toPool} dark={dark} />)
             )}
           </div>
         </div>
