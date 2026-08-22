@@ -138,7 +138,6 @@ const Card = ({ teamId, inTier, tierId, tierIdx, tierColor,
   argsRef, D, getGlobalBadge, toPool, dark }) => {
   const t = getTeam(teamId); if (!t) return null;
   const isSel  = selected === teamId;
-  const isNew  = newEntries.has(teamId);
   const withArgs = (showArgs === "editing" || showArgs === "fatto") && inTier;
   const LOGO = 44; // logo compatto
 
@@ -162,7 +161,7 @@ const Card = ({ teamId, inTier, tierId, tierIdx, tierColor,
           border:isSel?`2px solid ${D.accent}`:`2px solid rgba(255,255,255,0.1)`,
           boxShadow:isSel?`0 0 12px ${D.accent}88`:"0 2px 6px rgba(0,0,0,0.25)",
           transition:"border .15s, box-shadow .15s",
-          transform: isNew ? "scale(1.12)" : "scale(1)",
+          transform: "scale(1)",
           display:"flex", flexDirection:"column", alignItems:"center",
           background: withArgs ? `${tierColor||D.accent}12` : "transparent",
         }}
@@ -309,12 +308,7 @@ export default function App() {
   const [quickImg, setQuickImg]   = useState(null);
   const quickFileRef = useRef(null);
 
-  // Animated entries
-  const [newEntries, setNewEntries] = useState(new Set());
-  function flashEntry(id) {
-    setNewEntries(prev => new Set([...prev, id]));
-    setTimeout(() => setNewEntries(prev => { const n = new Set(prev); n.delete(id); return n; }), 500);
-  }
+  const newEntries = new Set(); // animazione rimossa per evitare re-render a catena
 
   const [toast, setToast] = useState(null);
   const showToast = useCallback((msg) => { setToast(msg); setTimeout(()=>setToast(null), 2200); }, []);
@@ -354,7 +348,6 @@ export default function App() {
     });
     setPools(prev => ({ ...prev, [mode]: prev[mode].filter(id=>id!==teamId) }));
     setSel(null);
-    flashEntry(teamId);
   }
 
   function reorderInTier(tierId, fromIdx, toIdx) {
@@ -437,7 +430,6 @@ export default function App() {
     });
     setFreePool(prev => prev.filter(x=>x.id!==item.id));
     setFreeSel(null);
-    flashEntry(item.id);
   }
 
   function freeRemove(item, tierId) {
