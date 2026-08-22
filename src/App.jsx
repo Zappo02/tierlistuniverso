@@ -313,7 +313,7 @@ export default function App() {
   const [toast, setToast] = useState(null);
   const showToast = useCallback((msg) => { setToast(msg); setTimeout(()=>setToast(null), 2200); }, []);
 
-  const D = dark ? {
+  const D = React.useMemo(() => dark ? {
     bg:"#0d0d1a", headerBg:"#12122a", rowBg:"#111122",
     poolBg:"rgba(255,255,255,0.03)", border:"rgba(255,255,255,0.08)",
     text:"#f0f0f8", subText:"rgba(255,255,255,0.3)", accent:"#f5c842",
@@ -327,12 +327,12 @@ export default function App() {
     inputBg:"rgba(0,0,0,0.06)", inputBorder:"rgba(0,0,0,0.2)",
     photoBtnBg:"rgba(0,0,0,0.1)", photoBtnColor:"#333",
     argBg:"rgba(0,0,0,0.05)", argBorder:"rgba(0,0,0,0.15)",
-  };
+  }, [dark]);
 
   const TIERS      = mode==="tier" ? TIER_TIERS : MARKET_TIERS;
   const placements = pl[mode] || {};
   const pool       = pools[mode] || [];
-  const getTeam    = id => TEAMS.find(t=>t.id===id);
+  const getTeam    = useCallback((id) => TEAMS.find(t=>t.id===id), []);
 
   // ── Tier/Market ───────────────────────────────
 
@@ -363,7 +363,7 @@ export default function App() {
     });
   }
 
-  function toPool(teamId) {
+  const toPool = useCallback((teamId) => {
     pushHistory(pl, pools);
     setPl(prev => {
       const tiers = {};
@@ -378,7 +378,7 @@ export default function App() {
       return { ...prev, [mode]: [...prev[mode], teamId] };
     });
     setSel(null);
-  }
+  }, [pl, pools, mode]);
 
   function clearTier(tierId) {
     pushHistory(pl, pools);
@@ -526,7 +526,7 @@ export default function App() {
   const total  = mode==="free" ? (freePool.length+placed) : TEAMS.length;
 
   // Calcola badge globale: numero progressivo per squadra in fascia
-  function getGlobalBadge(tierId, idx) {
+  const getGlobalBadge = useCallback((tierId, idx) => {
     let count = 0;
     for (const tier of TIERS) {
       const items = placements[tier.id] || [];
@@ -534,7 +534,7 @@ export default function App() {
       count += items.length;
     }
     return null;
-  }
+  }, [placements, TIERS]);
 
   // ── Tier row ──────────────────────────────────
   function TierRow({ tier }) {
