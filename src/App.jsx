@@ -219,7 +219,7 @@ function ArgBox({ teamId, argsRef, D, tierColor, argsMode }) {
         onClick={e => e.stopPropagation()}
         onDragStart={e => e.stopPropagation()}
         onKeyDown={e => e.stopPropagation()}
-        placeholder="Motivazione…"
+        placeholder="Motiva..."
         rows={1}
         style={{ width:"100%", fontSize:9, padding:"3px 4px", borderRadius:"0 0 8px 8px",
           border:`1px solid ${tierColor}66`,
@@ -587,7 +587,7 @@ export default function App() {
           <div style={{ fontSize:9, fontWeight:900, color:tier.color, textAlign:"center", lineHeight:1.15, letterSpacing:0, textShadow:dark?`0 0 14px ${tier.color}55`:"none", wordBreak:"break-word", width:"100%" }}>{tier.label}</div>
           <div style={{ fontSize:7, color:D.subText, marginTop:2, textAlign:"center", lineHeight:1.2 }}>{tier.desc}</div>
           <div style={{ fontSize:7, color:D.subText, marginTop:1 }}>{tierTeams.length > 0 ? `${tierTeams.length}` : ""}</div>
-          {selected && <div style={{ fontSize:8, color:tier.color, marginTop:3, opacity:.9 }}>↓ inserisci</div>}
+
 
         </div>
 
@@ -656,7 +656,7 @@ export default function App() {
             )}
           </div>
 
-          {freeSel && <div style={{ fontSize:8, color:tier.color }}>↓ inserisci</div>}
+
 
           <div style={{ display:"flex", gap:4, marginTop:2 }}>
             <button onClick={()=>duplicateFreeTier(tier)} title="Duplica fascia"
@@ -791,7 +791,7 @@ export default function App() {
       <div style={{ textAlign:"center", padding:"7px 12px 0", fontSize:10, color:D.subText, minHeight:20 }}>
         {mode==="free"
           ?(freeSel?"Elemento selezionato — tocca la fascia o trascinalo":"Doppio click sul nome fascia per rinominarlo · 🎨 colore · ⧉ duplica")
-          :(selected?`${getTeam(selected)?.name} selezionato — tocca la fascia per inserirlo`:"Trascina nella fascia o tocca logo → fascia · Trascina per riordinare · × per rimuovere")}
+          :"Trascina nella fascia o tocca logo → fascia · Trascina per riordinare · × per rimuovere"}
       </div>
 
       {/* BOARD */}
